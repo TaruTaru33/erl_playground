@@ -88,4 +88,10 @@ You have two weeks.
 **Good Luck!**
 
 # Candidate comments
-Please add here everythig you need...
+- Check and eventually modify server ip address on sys.config
+- Modify name in vm.args if you need to run 2 clients on same machine
+## Usage
+From client console:  
+* `sockclient:connect().`  
+* `sockclient:send_create_session(<User>).`  
+* `sockclient:send_menu_choice(<Choice>).`  
