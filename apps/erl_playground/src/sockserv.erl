@@ -3,6 +3,15 @@
 -behaviour(ranch_protocol).
 
 -include("erl_playground_pb.hrl").
+%% List of menu choice to send to clients
+%% Avoid to put any bond to .proto messages
+%% ---------------------------------------------
+%% TODO 
+%% Find a better and more dynamic implementation (do not use numeric keys?)
+%% ---------------------------------------------
+-define(OPTIONLIST, [#'options_list.single_option'{key=1,value="Weather Forecast"},
+                     #'options_list.single_option'{key=2,value="Answer to the Ultimate Question of Life, the Universe and Everything"},
+                     #'options_list.single_option'{key=3,value="Chat with Operator"}]).
 
 %% ------------------------------------------------------------------
 %% API Function Exports
@@ -139,8 +148,12 @@ code_change(_OldVsn, State, _Extra) ->
 process_packet(undefined, State, _Now) ->
     _ = lager:notice("client sent invalid packet, ignoring ~p",[State]),
     State;
-process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, transport = Transport}}, _Now)
-    when Type =:= create_session ->
+process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, transport = Transport}}, _Now) ->
+    case Type of
+    %% -------------------
+    %% Create Session Message 
+    %% -------------------
+    create_session ->
     #req{
         create_session_data = #create_session {
             username = UserName
@@ -148,13 +161,57 @@ process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, t
     } = Req,
     _ = lager:info("create_session received from ~p", [UserName]),
 
+    %% Send createSession response with username
     Response = #req{
         type = server_message,
         server_message_data = #server_message {
-            message = <<"OK">>
+            message = UserName
         }
     },
     Data = utils:add_envelope(Response),
     Transport:send(Socket,Data),
 
+    %%options_list ->
+    %% --------------------------------------------
+    %% XXX send option_list on a different request? 
+    %% --------------------------------------------
+    %% Send message with user options
+    OptionsMessage = #req{
+        type = options_list,
+        options_list_data = #options_list {
+            options = ?OPTIONLIST
+        }
+    },
+    OptionsData = utils:add_envelope(OptionsMessage),
+    Transport:send(Socket,OptionsData);
+    %% ----------------
+    %% Menu Choice Message
+    %% ----------------
+    menu_choice ->
+    #req{
+           menu_choice_data = #menu_choice {
+            choice = Choice
+        }
+    } = Req,
+    handle_menu_choice(Choice)
+    end,
     State.
+
+%% Handle a menu choice request
+handle_menu_choice(Choice) ->
+    #'options_list.single_option'{
+        key = Key
+    } = Choice,
+    _ = lager:info("menu_choice key received ~p", [Key]),
+    %% Implementation to all menu options
+    case Key of
+    1 -> 
+    _ = lager:info("weather");
+    2 -> 
+    _ = lager:info("answer");
+    3 ->
+    _ = lager:info("Operator");
+    _ -> 
+    _ = lager:info("Invalid Choice")
+    end.
+

@@ -7,6 +7,28 @@
 
 -define(erl_playground_pb_gpb_version, "3.26.6").
 
+-ifndef('OPTIONS_LIST.SINGLE_OPTION_PB_H').
+-define('OPTIONS_LIST.SINGLE_OPTION_PB_H', true).
+-record('options_list.single_option',
+        {key                    :: integer(),       % = 1, 32 bits
+         value                  :: binary() | iolist() | undefined % = 2
+        }).
+-endif.
+
+-ifndef('MENU_CHOICE_PB_H').
+-define('MENU_CHOICE_PB_H', true).
+-record(menu_choice,
+        {choice                 :: #'options_list.single_option'{} | undefined % = 1
+        }).
+-endif.
+
+-ifndef('OPTIONS_LIST_PB_H').
+-define('OPTIONS_LIST_PB_H', true).
+-record(options_list,
+        {options = []           :: [#'options_list.single_option'{}] % = 1
+        }).
+-endif.
+
 -ifndef('SERVER_MESSAGE_PB_H').
 -define('SERVER_MESSAGE_PB_H', true).
 -record(server_message,
@@ -24,9 +46,11 @@
 -ifndef('REQ_PB_H').
 -define('REQ_PB_H', true).
 -record(req,
-        {type                   :: 'create_session' | 'server_message' | integer(), % = 1, enum req.type_enum
+        {type                   :: 'create_session' | 'server_message' | 'options_list' | 'menu_choice' | integer(), % = 1, enum req.type_enum
          create_session_data    :: #create_session{} | undefined, % = 2
-         server_message_data    :: #server_message{} | undefined % = 3
+         server_message_data    :: #server_message{} | undefined, % = 3
+         options_list_data      :: #options_list{} | undefined, % = 4
+         menu_choice_data       :: #menu_choice{} | undefined % = 5
         }).
 -endif.
 

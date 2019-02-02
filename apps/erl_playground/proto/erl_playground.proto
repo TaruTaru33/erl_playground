@@ -6,14 +6,31 @@ message server_message {
     required string message = 1;
 }
 
+message options_list {
+  message single_option {
+    required int32 key = 1;
+    optional string value = 2;
+  }
+  repeated single_option options = 1;
+}
+
+
+message menu_choice {
+    optional options_list.single_option choice = 1;
+}
+
 message req {
     enum type_enum {
         create_session = 1;
         server_message = 2;
+        options_list = 3;
+        menu_choice = 4;
     }
     required type_enum type = 1;
     optional create_session create_session_data = 2;
     optional server_message server_message_data = 3;
+    optional options_list options_list_data = 4;
+    optional menu_choice menu_choice_data = 5;
 }
 
 message envelope {

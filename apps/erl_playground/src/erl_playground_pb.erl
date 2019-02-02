@@ -25,15 +25,18 @@
 -include("gpb.hrl").
 
 %% enumerated types
--type 'req.type_enum'() :: 'create_session' | 'server_message'.
+-type 'req.type_enum'() :: 'create_session' | 'server_message' | 'options_list' | 'menu_choice'.
 -export_type(['req.type_enum'/0]).
 
 %% message types
+-type 'options_list.single_option'() :: #'options_list.single_option'{}.
+-type menu_choice() :: #menu_choice{}.
+-type options_list() :: #options_list{}.
 -type server_message() :: #server_message{}.
 -type create_session() :: #create_session{}.
 -type req() :: #req{}.
 -type envelope() :: #envelope{}.
--export_type(['server_message'/0, 'create_session'/0, 'req'/0, 'envelope'/0]).
+-export_type(['options_list.single_option'/0, 'menu_choice'/0, 'options_list'/0, 'server_message'/0, 'create_session'/0, 'req'/0, 'envelope'/0]).
 
 
 -spec encode_msg(_) -> binary().
@@ -45,6 +48,10 @@ encode_msg(Msg, Opts) ->
     verify_msg(Msg, Opts),
     TrUserData = proplists:get_value(user_data, Opts),
     case Msg of
+      #'options_list.single_option'{} ->
+	  'e_msg_options_list.single_option'(Msg, TrUserData);
+      #menu_choice{} -> e_msg_menu_choice(Msg, TrUserData);
+      #options_list{} -> e_msg_options_list(Msg, TrUserData);
       #server_message{} ->
 	  e_msg_server_message(Msg, TrUserData);
       #create_session{} ->
@@ -54,6 +61,56 @@ encode_msg(Msg, Opts) ->
     end.
 
 
+
+'e_msg_options_list.single_option'(Msg, TrUserData) ->
+    'e_msg_options_list.single_option'(Msg, <<>>,
+				       TrUserData).
+
+
+'e_msg_options_list.single_option'(#'options_list.single_option'{key
+								     = F1,
+								 value = F2},
+				   Bin, TrUserData) ->
+    B1 = begin
+	   TrF1 = id(F1, TrUserData),
+	   e_type_int32(TrF1, <<Bin/binary, 8>>)
+	 end,
+    if F2 == undefined -> B1;
+       true ->
+	   begin
+	     TrF2 = id(F2, TrUserData),
+	     e_type_string(TrF2, <<B1/binary, 18>>)
+	   end
+    end.
+
+e_msg_menu_choice(Msg, TrUserData) ->
+    e_msg_menu_choice(Msg, <<>>, TrUserData).
+
+
+e_msg_menu_choice(#menu_choice{choice = F1}, Bin,
+		  TrUserData) ->
+    if F1 == undefined -> Bin;
+       true ->
+	   begin
+	     TrF1 = id(F1, TrUserData),
+	     e_mfield_menu_choice_choice(TrF1, <<Bin/binary, 10>>,
+					 TrUserData)
+	   end
+    end.
+
+e_msg_options_list(Msg, TrUserData) ->
+    e_msg_options_list(Msg, <<>>, TrUserData).
+
+
+e_msg_options_list(#options_list{options = F1}, Bin,
+		   TrUserData) ->
+    begin
+      TrF1 = id(F1, TrUserData),
+      if TrF1 == [] -> Bin;
+	 true ->
+	     e_field_options_list_options(TrF1, Bin, TrUserData)
+      end
+    end.
 
 e_msg_server_message(Msg, TrUserData) ->
     e_msg_server_message(Msg, <<>>, TrUserData).
@@ -82,7 +139,8 @@ e_msg_req(Msg, TrUserData) ->
 
 
 e_msg_req(#req{type = F1, create_session_data = F2,
-	       server_message_data = F3},
+	       server_message_data = F3, options_list_data = F4,
+	       menu_choice_data = F5},
 	  Bin, TrUserData) ->
     B1 = begin
 	   TrF1 = id(F1, TrUserData),
@@ -97,12 +155,29 @@ e_msg_req(#req{type = F1, create_session_data = F2,
 						   TrUserData)
 		end
 	 end,
-    if F3 == undefined -> B2;
+    B3 = if F3 == undefined -> B2;
+	    true ->
+		begin
+		  TrF3 = id(F3, TrUserData),
+		  e_mfield_req_server_message_data(TrF3,
+						   <<B2/binary, 26>>,
+						   TrUserData)
+		end
+	 end,
+    B4 = if F4 == undefined -> B3;
+	    true ->
+		begin
+		  TrF4 = id(F4, TrUserData),
+		  e_mfield_req_options_list_data(TrF4, <<B3/binary, 34>>,
+						 TrUserData)
+		end
+	 end,
+    if F5 == undefined -> B4;
        true ->
 	   begin
-	     TrF3 = id(F3, TrUserData),
-	     e_mfield_req_server_message_data(TrF3,
-					      <<B2/binary, 26>>, TrUserData)
+	     TrF5 = id(F5, TrUserData),
+	     e_mfield_req_menu_choice_data(TrF5, <<B4/binary, 42>>,
+					   TrUserData)
 	   end
     end.
 
@@ -118,6 +193,28 @@ e_msg_envelope(#envelope{uncompressed_data = F1}, Bin,
 					  <<Bin/binary, 18>>, TrUserData)
     end.
 
+e_mfield_menu_choice_choice(Msg, Bin, TrUserData) ->
+    SubBin = 'e_msg_options_list.single_option'(Msg, <<>>,
+						TrUserData),
+    Bin2 = e_varint(byte_size(SubBin), Bin),
+    <<Bin2/binary, SubBin/binary>>.
+
+e_mfield_options_list_options(Msg, Bin, TrUserData) ->
+    SubBin = 'e_msg_options_list.single_option'(Msg, <<>>,
+						TrUserData),
+    Bin2 = e_varint(byte_size(SubBin), Bin),
+    <<Bin2/binary, SubBin/binary>>.
+
+e_field_options_list_options([Elem | Rest], Bin,
+			     TrUserData) ->
+    Bin2 = <<Bin/binary, 10>>,
+    Bin3 = e_mfield_options_list_options(id(Elem,
+					    TrUserData),
+					 Bin2, TrUserData),
+    e_field_options_list_options(Rest, Bin3, TrUserData);
+e_field_options_list_options([], Bin, _TrUserData) ->
+    Bin.
+
 e_mfield_req_create_session_data(Msg, Bin,
 				 TrUserData) ->
     SubBin = e_msg_create_session(Msg, <<>>, TrUserData),
@@ -127,6 +224,16 @@ e_mfield_req_create_session_data(Msg, Bin,
 e_mfield_req_server_message_data(Msg, Bin,
 				 TrUserData) ->
     SubBin = e_msg_server_message(Msg, <<>>, TrUserData),
+    Bin2 = e_varint(byte_size(SubBin), Bin),
+    <<Bin2/binary, SubBin/binary>>.
+
+e_mfield_req_options_list_data(Msg, Bin, TrUserData) ->
+    SubBin = e_msg_options_list(Msg, <<>>, TrUserData),
+    Bin2 = e_varint(byte_size(SubBin), Bin),
+    <<Bin2/binary, SubBin/binary>>.
+
+e_mfield_req_menu_choice_data(Msg, Bin, TrUserData) ->
+    SubBin = e_msg_menu_choice(Msg, <<>>, TrUserData),
     Bin2 = e_varint(byte_size(SubBin), Bin),
     <<Bin2/binary, SubBin/binary>>.
 
@@ -142,7 +249,18 @@ e_mfield_envelope_uncompressed_data(Msg, Bin,
     <<Bin/binary, 1>>;
 'e_enum_req.type_enum'(server_message, Bin) ->
     <<Bin/binary, 2>>;
+'e_enum_req.type_enum'(options_list, Bin) ->
+    <<Bin/binary, 3>>;
+'e_enum_req.type_enum'(menu_choice, Bin) ->
+    <<Bin/binary, 4>>;
 'e_enum_req.type_enum'(V, Bin) -> e_varint(V, Bin).
+
+e_type_int32(Value, Bin)
+    when 0 =< Value, Value =< 127 ->
+    <<Bin/binary, Value>>;
+e_type_int32(Value, Bin) ->
+    <<N:64/unsigned-native>> = <<Value:64/signed-native>>,
+    e_varint(N, Bin).
 
 e_type_string(S, Bin) ->
     Utf8 = unicode:characters_to_binary(S),
@@ -162,12 +280,353 @@ decode_msg(Bin, MsgName) when is_binary(Bin) ->
 decode_msg(Bin, MsgName, Opts) when is_binary(Bin) ->
     TrUserData = proplists:get_value(user_data, Opts),
     case MsgName of
+      'options_list.single_option' ->
+	  'd_msg_options_list.single_option'(Bin, TrUserData);
+      menu_choice -> d_msg_menu_choice(Bin, TrUserData);
+      options_list -> d_msg_options_list(Bin, TrUserData);
       server_message -> d_msg_server_message(Bin, TrUserData);
       create_session -> d_msg_create_session(Bin, TrUserData);
       req -> d_msg_req(Bin, TrUserData);
       envelope -> d_msg_envelope(Bin, TrUserData)
     end.
 
+
+
+'d_msg_options_list.single_option'(Bin, TrUserData) ->
+    'dfp_read_field_def_options_list.single_option'(Bin, 0,
+						    0,
+						    id(undefined, TrUserData),
+						    id(undefined, TrUserData),
+						    TrUserData).
+
+'dfp_read_field_def_options_list.single_option'(<<8,
+						  Rest/binary>>,
+						Z1, Z2, F1, F2, TrUserData) ->
+    'd_field_options_list.single_option_key'(Rest, Z1, Z2,
+					     F1, F2, TrUserData);
+'dfp_read_field_def_options_list.single_option'(<<18,
+						  Rest/binary>>,
+						Z1, Z2, F1, F2, TrUserData) ->
+    'd_field_options_list.single_option_value'(Rest, Z1, Z2,
+					       F1, F2, TrUserData);
+'dfp_read_field_def_options_list.single_option'(<<>>, 0,
+						0, F1, F2, _) ->
+    #'options_list.single_option'{key = F1, value = F2};
+'dfp_read_field_def_options_list.single_option'(Other,
+						Z1, Z2, F1, F2, TrUserData) ->
+    'dg_read_field_def_options_list.single_option'(Other,
+						   Z1, Z2, F1, F2, TrUserData).
+
+'dg_read_field_def_options_list.single_option'(<<1:1,
+						 X:7, Rest/binary>>,
+					       N, Acc, F1, F2, TrUserData)
+    when N < 32 - 7 ->
+    'dg_read_field_def_options_list.single_option'(Rest,
+						   N + 7, X bsl N + Acc, F1, F2,
+						   TrUserData);
+'dg_read_field_def_options_list.single_option'(<<0:1,
+						 X:7, Rest/binary>>,
+					       N, Acc, F1, F2, TrUserData) ->
+    Key = X bsl N + Acc,
+    case Key of
+      8 ->
+	  'd_field_options_list.single_option_key'(Rest, 0, 0, F1,
+						   F2, TrUserData);
+      18 ->
+	  'd_field_options_list.single_option_value'(Rest, 0, 0,
+						     F1, F2, TrUserData);
+      _ ->
+	  case Key band 7 of
+	    0 ->
+		'skip_varint_options_list.single_option'(Rest, 0, 0, F1,
+							 F2, TrUserData);
+	    1 ->
+		'skip_64_options_list.single_option'(Rest, 0, 0, F1, F2,
+						     TrUserData);
+	    2 ->
+		'skip_length_delimited_options_list.single_option'(Rest,
+								   0, 0, F1, F2,
+								   TrUserData);
+	    5 ->
+		'skip_32_options_list.single_option'(Rest, 0, 0, F1, F2,
+						     TrUserData)
+	  end
+    end;
+'dg_read_field_def_options_list.single_option'(<<>>, 0,
+					       0, F1, F2, _) ->
+    #'options_list.single_option'{key = F1, value = F2}.
+
+'d_field_options_list.single_option_key'(<<1:1, X:7,
+					   Rest/binary>>,
+					 N, Acc, F1, F2, TrUserData)
+    when N < 57 ->
+    'd_field_options_list.single_option_key'(Rest, N + 7,
+					     X bsl N + Acc, F1, F2, TrUserData);
+'d_field_options_list.single_option_key'(<<0:1, X:7,
+					   Rest/binary>>,
+					 N, Acc, _, F2, TrUserData) ->
+    <<NewFValue:32/signed-native>> = <<(X bsl N +
+					  Acc):32/unsigned-native>>,
+    'dfp_read_field_def_options_list.single_option'(Rest, 0,
+						    0, NewFValue, F2,
+						    TrUserData).
+
+
+'d_field_options_list.single_option_value'(<<1:1, X:7,
+					     Rest/binary>>,
+					   N, Acc, F1, F2, TrUserData)
+    when N < 57 ->
+    'd_field_options_list.single_option_value'(Rest, N + 7,
+					       X bsl N + Acc, F1, F2,
+					       TrUserData);
+'d_field_options_list.single_option_value'(<<0:1, X:7,
+					     Rest/binary>>,
+					   N, Acc, F1, _, TrUserData) ->
+    Len = X bsl N + Acc,
+    <<Bytes:Len/binary, Rest2/binary>> = Rest,
+    NewFValue = binary:copy(Bytes),
+    'dfp_read_field_def_options_list.single_option'(Rest2,
+						    0, 0, F1, NewFValue,
+						    TrUserData).
+
+
+'skip_varint_options_list.single_option'(<<1:1, _:7,
+					   Rest/binary>>,
+					 Z1, Z2, F1, F2, TrUserData) ->
+    'skip_varint_options_list.single_option'(Rest, Z1, Z2,
+					     F1, F2, TrUserData);
+'skip_varint_options_list.single_option'(<<0:1, _:7,
+					   Rest/binary>>,
+					 Z1, Z2, F1, F2, TrUserData) ->
+    'dfp_read_field_def_options_list.single_option'(Rest,
+						    Z1, Z2, F1, F2, TrUserData).
+
+
+'skip_length_delimited_options_list.single_option'(<<1:1,
+						     X:7, Rest/binary>>,
+						   N, Acc, F1, F2, TrUserData)
+    when N < 57 ->
+    'skip_length_delimited_options_list.single_option'(Rest,
+						       N + 7, X bsl N + Acc, F1,
+						       F2, TrUserData);
+'skip_length_delimited_options_list.single_option'(<<0:1,
+						     X:7, Rest/binary>>,
+						   N, Acc, F1, F2,
+						   TrUserData) ->
+    Length = X bsl N + Acc,
+    <<_:Length/binary, Rest2/binary>> = Rest,
+    'dfp_read_field_def_options_list.single_option'(Rest2,
+						    0, 0, F1, F2, TrUserData).
+
+
+'skip_32_options_list.single_option'(<<_:32,
+				       Rest/binary>>,
+				     Z1, Z2, F1, F2, TrUserData) ->
+    'dfp_read_field_def_options_list.single_option'(Rest,
+						    Z1, Z2, F1, F2, TrUserData).
+
+
+'skip_64_options_list.single_option'(<<_:64,
+				       Rest/binary>>,
+				     Z1, Z2, F1, F2, TrUserData) ->
+    'dfp_read_field_def_options_list.single_option'(Rest,
+						    Z1, Z2, F1, F2, TrUserData).
+
+
+d_msg_menu_choice(Bin, TrUserData) ->
+    dfp_read_field_def_menu_choice(Bin, 0, 0,
+				   id(undefined, TrUserData), TrUserData).
+
+dfp_read_field_def_menu_choice(<<10, Rest/binary>>, Z1,
+			       Z2, F1, TrUserData) ->
+    d_field_menu_choice_choice(Rest, Z1, Z2, F1,
+			       TrUserData);
+dfp_read_field_def_menu_choice(<<>>, 0, 0, F1, _) ->
+    #menu_choice{choice = F1};
+dfp_read_field_def_menu_choice(Other, Z1, Z2, F1,
+			       TrUserData) ->
+    dg_read_field_def_menu_choice(Other, Z1, Z2, F1,
+				  TrUserData).
+
+dg_read_field_def_menu_choice(<<1:1, X:7, Rest/binary>>,
+			      N, Acc, F1, TrUserData)
+    when N < 32 - 7 ->
+    dg_read_field_def_menu_choice(Rest, N + 7,
+				  X bsl N + Acc, F1, TrUserData);
+dg_read_field_def_menu_choice(<<0:1, X:7, Rest/binary>>,
+			      N, Acc, F1, TrUserData) ->
+    Key = X bsl N + Acc,
+    case Key of
+      10 ->
+	  d_field_menu_choice_choice(Rest, 0, 0, F1, TrUserData);
+      _ ->
+	  case Key band 7 of
+	    0 ->
+		skip_varint_menu_choice(Rest, 0, 0, F1, TrUserData);
+	    1 -> skip_64_menu_choice(Rest, 0, 0, F1, TrUserData);
+	    2 ->
+		skip_length_delimited_menu_choice(Rest, 0, 0, F1,
+						  TrUserData);
+	    5 -> skip_32_menu_choice(Rest, 0, 0, F1, TrUserData)
+	  end
+    end;
+dg_read_field_def_menu_choice(<<>>, 0, 0, F1, _) ->
+    #menu_choice{choice = F1}.
+
+d_field_menu_choice_choice(<<1:1, X:7, Rest/binary>>, N,
+			   Acc, F1, TrUserData)
+    when N < 57 ->
+    d_field_menu_choice_choice(Rest, N + 7, X bsl N + Acc,
+			       F1, TrUserData);
+d_field_menu_choice_choice(<<0:1, X:7, Rest/binary>>, N,
+			   Acc, F1, TrUserData) ->
+    Len = X bsl N + Acc,
+    <<Bs:Len/binary, Rest2/binary>> = Rest,
+    NewFValue = id('d_msg_options_list.single_option'(Bs,
+						      TrUserData),
+		   TrUserData),
+    dfp_read_field_def_menu_choice(Rest2, 0, 0,
+				   if F1 == undefined -> NewFValue;
+				      true ->
+					  'merge_msg_options_list.single_option'(F1,
+										 NewFValue,
+										 TrUserData)
+				   end,
+				   TrUserData).
+
+
+skip_varint_menu_choice(<<1:1, _:7, Rest/binary>>, Z1,
+			Z2, F1, TrUserData) ->
+    skip_varint_menu_choice(Rest, Z1, Z2, F1, TrUserData);
+skip_varint_menu_choice(<<0:1, _:7, Rest/binary>>, Z1,
+			Z2, F1, TrUserData) ->
+    dfp_read_field_def_menu_choice(Rest, Z1, Z2, F1,
+				   TrUserData).
+
+
+skip_length_delimited_menu_choice(<<1:1, X:7,
+				    Rest/binary>>,
+				  N, Acc, F1, TrUserData)
+    when N < 57 ->
+    skip_length_delimited_menu_choice(Rest, N + 7,
+				      X bsl N + Acc, F1, TrUserData);
+skip_length_delimited_menu_choice(<<0:1, X:7,
+				    Rest/binary>>,
+				  N, Acc, F1, TrUserData) ->
+    Length = X bsl N + Acc,
+    <<_:Length/binary, Rest2/binary>> = Rest,
+    dfp_read_field_def_menu_choice(Rest2, 0, 0, F1,
+				   TrUserData).
+
+
+skip_32_menu_choice(<<_:32, Rest/binary>>, Z1, Z2, F1,
+		    TrUserData) ->
+    dfp_read_field_def_menu_choice(Rest, Z1, Z2, F1,
+				   TrUserData).
+
+
+skip_64_menu_choice(<<_:64, Rest/binary>>, Z1, Z2, F1,
+		    TrUserData) ->
+    dfp_read_field_def_menu_choice(Rest, Z1, Z2, F1,
+				   TrUserData).
+
+
+d_msg_options_list(Bin, TrUserData) ->
+    dfp_read_field_def_options_list(Bin, 0, 0,
+				    id([], TrUserData), TrUserData).
+
+dfp_read_field_def_options_list(<<10, Rest/binary>>, Z1,
+				Z2, F1, TrUserData) ->
+    d_field_options_list_options(Rest, Z1, Z2, F1,
+				 TrUserData);
+dfp_read_field_def_options_list(<<>>, 0, 0, F1,
+				TrUserData) ->
+    #options_list{options = lists_reverse(F1, TrUserData)};
+dfp_read_field_def_options_list(Other, Z1, Z2, F1,
+				TrUserData) ->
+    dg_read_field_def_options_list(Other, Z1, Z2, F1,
+				   TrUserData).
+
+dg_read_field_def_options_list(<<1:1, X:7,
+				 Rest/binary>>,
+			       N, Acc, F1, TrUserData)
+    when N < 32 - 7 ->
+    dg_read_field_def_options_list(Rest, N + 7,
+				   X bsl N + Acc, F1, TrUserData);
+dg_read_field_def_options_list(<<0:1, X:7,
+				 Rest/binary>>,
+			       N, Acc, F1, TrUserData) ->
+    Key = X bsl N + Acc,
+    case Key of
+      10 ->
+	  d_field_options_list_options(Rest, 0, 0, F1,
+				       TrUserData);
+      _ ->
+	  case Key band 7 of
+	    0 ->
+		skip_varint_options_list(Rest, 0, 0, F1, TrUserData);
+	    1 -> skip_64_options_list(Rest, 0, 0, F1, TrUserData);
+	    2 ->
+		skip_length_delimited_options_list(Rest, 0, 0, F1,
+						   TrUserData);
+	    5 -> skip_32_options_list(Rest, 0, 0, F1, TrUserData)
+	  end
+    end;
+dg_read_field_def_options_list(<<>>, 0, 0, F1,
+			       TrUserData) ->
+    #options_list{options = lists_reverse(F1, TrUserData)}.
+
+d_field_options_list_options(<<1:1, X:7, Rest/binary>>,
+			     N, Acc, F1, TrUserData)
+    when N < 57 ->
+    d_field_options_list_options(Rest, N + 7, X bsl N + Acc,
+				 F1, TrUserData);
+d_field_options_list_options(<<0:1, X:7, Rest/binary>>,
+			     N, Acc, F1, TrUserData) ->
+    Len = X bsl N + Acc,
+    <<Bs:Len/binary, Rest2/binary>> = Rest,
+    NewFValue = id('d_msg_options_list.single_option'(Bs,
+						      TrUserData),
+		   TrUserData),
+    dfp_read_field_def_options_list(Rest2, 0, 0,
+				    cons(NewFValue, F1, TrUserData),
+				    TrUserData).
+
+
+skip_varint_options_list(<<1:1, _:7, Rest/binary>>, Z1,
+			 Z2, F1, TrUserData) ->
+    skip_varint_options_list(Rest, Z1, Z2, F1, TrUserData);
+skip_varint_options_list(<<0:1, _:7, Rest/binary>>, Z1,
+			 Z2, F1, TrUserData) ->
+    dfp_read_field_def_options_list(Rest, Z1, Z2, F1,
+				    TrUserData).
+
+
+skip_length_delimited_options_list(<<1:1, X:7,
+				     Rest/binary>>,
+				   N, Acc, F1, TrUserData)
+    when N < 57 ->
+    skip_length_delimited_options_list(Rest, N + 7,
+				       X bsl N + Acc, F1, TrUserData);
+skip_length_delimited_options_list(<<0:1, X:7,
+				     Rest/binary>>,
+				   N, Acc, F1, TrUserData) ->
+    Length = X bsl N + Acc,
+    <<_:Length/binary, Rest2/binary>> = Rest,
+    dfp_read_field_def_options_list(Rest2, 0, 0, F1,
+				    TrUserData).
+
+
+skip_32_options_list(<<_:32, Rest/binary>>, Z1, Z2, F1,
+		     TrUserData) ->
+    dfp_read_field_def_options_list(Rest, Z1, Z2, F1,
+				    TrUserData).
+
+
+skip_64_options_list(<<_:64, Rest/binary>>, Z1, Z2, F1,
+		     TrUserData) ->
+    dfp_read_field_def_options_list(Rest, Z1, Z2, F1,
+				    TrUserData).
 
 
 d_msg_server_message(Bin, TrUserData) ->
@@ -365,82 +824,107 @@ skip_64_create_session(<<_:64, Rest/binary>>, Z1, Z2,
 d_msg_req(Bin, TrUserData) ->
     dfp_read_field_def_req(Bin, 0, 0,
 			   id(undefined, TrUserData), id(undefined, TrUserData),
+			   id(undefined, TrUserData), id(undefined, TrUserData),
 			   id(undefined, TrUserData), TrUserData).
 
 dfp_read_field_def_req(<<8, Rest/binary>>, Z1, Z2, F1,
-		       F2, F3, TrUserData) ->
-    d_field_req_type(Rest, Z1, Z2, F1, F2, F3, TrUserData);
+		       F2, F3, F4, F5, TrUserData) ->
+    d_field_req_type(Rest, Z1, Z2, F1, F2, F3, F4, F5,
+		     TrUserData);
 dfp_read_field_def_req(<<18, Rest/binary>>, Z1, Z2, F1,
-		       F2, F3, TrUserData) ->
+		       F2, F3, F4, F5, TrUserData) ->
     d_field_req_create_session_data(Rest, Z1, Z2, F1, F2,
-				    F3, TrUserData);
+				    F3, F4, F5, TrUserData);
 dfp_read_field_def_req(<<26, Rest/binary>>, Z1, Z2, F1,
-		       F2, F3, TrUserData) ->
+		       F2, F3, F4, F5, TrUserData) ->
     d_field_req_server_message_data(Rest, Z1, Z2, F1, F2,
-				    F3, TrUserData);
-dfp_read_field_def_req(<<>>, 0, 0, F1, F2, F3, _) ->
+				    F3, F4, F5, TrUserData);
+dfp_read_field_def_req(<<34, Rest/binary>>, Z1, Z2, F1,
+		       F2, F3, F4, F5, TrUserData) ->
+    d_field_req_options_list_data(Rest, Z1, Z2, F1, F2, F3,
+				  F4, F5, TrUserData);
+dfp_read_field_def_req(<<42, Rest/binary>>, Z1, Z2, F1,
+		       F2, F3, F4, F5, TrUserData) ->
+    d_field_req_menu_choice_data(Rest, Z1, Z2, F1, F2, F3,
+				 F4, F5, TrUserData);
+dfp_read_field_def_req(<<>>, 0, 0, F1, F2, F3, F4, F5,
+		       _) ->
     #req{type = F1, create_session_data = F2,
-	 server_message_data = F3};
-dfp_read_field_def_req(Other, Z1, Z2, F1, F2, F3,
-		       TrUserData) ->
-    dg_read_field_def_req(Other, Z1, Z2, F1, F2, F3,
+	 server_message_data = F3, options_list_data = F4,
+	 menu_choice_data = F5};
+dfp_read_field_def_req(Other, Z1, Z2, F1, F2, F3, F4,
+		       F5, TrUserData) ->
+    dg_read_field_def_req(Other, Z1, Z2, F1, F2, F3, F4, F5,
 			  TrUserData).
 
 dg_read_field_def_req(<<1:1, X:7, Rest/binary>>, N, Acc,
-		      F1, F2, F3, TrUserData)
+		      F1, F2, F3, F4, F5, TrUserData)
     when N < 32 - 7 ->
     dg_read_field_def_req(Rest, N + 7, X bsl N + Acc, F1,
-			  F2, F3, TrUserData);
+			  F2, F3, F4, F5, TrUserData);
 dg_read_field_def_req(<<0:1, X:7, Rest/binary>>, N, Acc,
-		      F1, F2, F3, TrUserData) ->
+		      F1, F2, F3, F4, F5, TrUserData) ->
     Key = X bsl N + Acc,
     case Key of
       8 ->
-	  d_field_req_type(Rest, 0, 0, F1, F2, F3, TrUserData);
+	  d_field_req_type(Rest, 0, 0, F1, F2, F3, F4, F5,
+			   TrUserData);
       18 ->
 	  d_field_req_create_session_data(Rest, 0, 0, F1, F2, F3,
-					  TrUserData);
+					  F4, F5, TrUserData);
       26 ->
 	  d_field_req_server_message_data(Rest, 0, 0, F1, F2, F3,
-					  TrUserData);
+					  F4, F5, TrUserData);
+      34 ->
+	  d_field_req_options_list_data(Rest, 0, 0, F1, F2, F3,
+					F4, F5, TrUserData);
+      42 ->
+	  d_field_req_menu_choice_data(Rest, 0, 0, F1, F2, F3, F4,
+				       F5, TrUserData);
       _ ->
 	  case Key band 7 of
 	    0 ->
-		skip_varint_req(Rest, 0, 0, F1, F2, F3, TrUserData);
-	    1 -> skip_64_req(Rest, 0, 0, F1, F2, F3, TrUserData);
+		skip_varint_req(Rest, 0, 0, F1, F2, F3, F4, F5,
+				TrUserData);
+	    1 ->
+		skip_64_req(Rest, 0, 0, F1, F2, F3, F4, F5, TrUserData);
 	    2 ->
-		skip_length_delimited_req(Rest, 0, 0, F1, F2, F3,
-					  TrUserData);
-	    5 -> skip_32_req(Rest, 0, 0, F1, F2, F3, TrUserData)
+		skip_length_delimited_req(Rest, 0, 0, F1, F2, F3, F4,
+					  F5, TrUserData);
+	    5 ->
+		skip_32_req(Rest, 0, 0, F1, F2, F3, F4, F5, TrUserData)
 	  end
     end;
-dg_read_field_def_req(<<>>, 0, 0, F1, F2, F3, _) ->
+dg_read_field_def_req(<<>>, 0, 0, F1, F2, F3, F4, F5,
+		      _) ->
     #req{type = F1, create_session_data = F2,
-	 server_message_data = F3}.
+	 server_message_data = F3, options_list_data = F4,
+	 menu_choice_data = F5}.
 
 d_field_req_type(<<1:1, X:7, Rest/binary>>, N, Acc, F1,
-		 F2, F3, TrUserData)
+		 F2, F3, F4, F5, TrUserData)
     when N < 57 ->
     d_field_req_type(Rest, N + 7, X bsl N + Acc, F1, F2, F3,
-		     TrUserData);
+		     F4, F5, TrUserData);
 d_field_req_type(<<0:1, X:7, Rest/binary>>, N, Acc, _,
-		 F2, F3, TrUserData) ->
+		 F2, F3, F4, F5, TrUserData) ->
     <<Tmp:32/signed-native>> = <<(X bsl N +
 				    Acc):32/unsigned-native>>,
     NewFValue = 'd_enum_req.type_enum'(Tmp),
     dfp_read_field_def_req(Rest, 0, 0, NewFValue, F2, F3,
-			   TrUserData).
+			   F4, F5, TrUserData).
 
 
 d_field_req_create_session_data(<<1:1, X:7,
 				  Rest/binary>>,
-				N, Acc, F1, F2, F3, TrUserData)
+				N, Acc, F1, F2, F3, F4, F5, TrUserData)
     when N < 57 ->
     d_field_req_create_session_data(Rest, N + 7,
-				    X bsl N + Acc, F1, F2, F3, TrUserData);
+				    X bsl N + Acc, F1, F2, F3, F4, F5,
+				    TrUserData);
 d_field_req_create_session_data(<<0:1, X:7,
 				  Rest/binary>>,
-				N, Acc, F1, F2, F3, TrUserData) ->
+				N, Acc, F1, F2, F3, F4, F5, TrUserData) ->
     Len = X bsl N + Acc,
     <<Bs:Len/binary, Rest2/binary>> = Rest,
     NewFValue = id(d_msg_create_session(Bs, TrUserData),
@@ -451,18 +935,19 @@ d_field_req_create_session_data(<<0:1, X:7,
 				  merge_msg_create_session(F2, NewFValue,
 							   TrUserData)
 			   end,
-			   F3, TrUserData).
+			   F3, F4, F5, TrUserData).
 
 
 d_field_req_server_message_data(<<1:1, X:7,
 				  Rest/binary>>,
-				N, Acc, F1, F2, F3, TrUserData)
+				N, Acc, F1, F2, F3, F4, F5, TrUserData)
     when N < 57 ->
     d_field_req_server_message_data(Rest, N + 7,
-				    X bsl N + Acc, F1, F2, F3, TrUserData);
+				    X bsl N + Acc, F1, F2, F3, F4, F5,
+				    TrUserData);
 d_field_req_server_message_data(<<0:1, X:7,
 				  Rest/binary>>,
-				N, Acc, F1, F2, F3, TrUserData) ->
+				N, Acc, F1, F2, F3, F4, F5, TrUserData) ->
     Len = X bsl N + Acc,
     <<Bs:Len/binary, Rest2/binary>> = Rest,
     NewFValue = id(d_msg_server_message(Bs, TrUserData),
@@ -473,40 +958,82 @@ d_field_req_server_message_data(<<0:1, X:7,
 				  merge_msg_server_message(F3, NewFValue,
 							   TrUserData)
 			   end,
+			   F4, F5, TrUserData).
+
+
+d_field_req_options_list_data(<<1:1, X:7, Rest/binary>>,
+			      N, Acc, F1, F2, F3, F4, F5, TrUserData)
+    when N < 57 ->
+    d_field_req_options_list_data(Rest, N + 7,
+				  X bsl N + Acc, F1, F2, F3, F4, F5,
+				  TrUserData);
+d_field_req_options_list_data(<<0:1, X:7, Rest/binary>>,
+			      N, Acc, F1, F2, F3, F4, F5, TrUserData) ->
+    Len = X bsl N + Acc,
+    <<Bs:Len/binary, Rest2/binary>> = Rest,
+    NewFValue = id(d_msg_options_list(Bs, TrUserData),
+		   TrUserData),
+    dfp_read_field_def_req(Rest2, 0, 0, F1, F2, F3,
+			   if F4 == undefined -> NewFValue;
+			      true ->
+				  merge_msg_options_list(F4, NewFValue,
+							 TrUserData)
+			   end,
+			   F5, TrUserData).
+
+
+d_field_req_menu_choice_data(<<1:1, X:7, Rest/binary>>,
+			     N, Acc, F1, F2, F3, F4, F5, TrUserData)
+    when N < 57 ->
+    d_field_req_menu_choice_data(Rest, N + 7, X bsl N + Acc,
+				 F1, F2, F3, F4, F5, TrUserData);
+d_field_req_menu_choice_data(<<0:1, X:7, Rest/binary>>,
+			     N, Acc, F1, F2, F3, F4, F5, TrUserData) ->
+    Len = X bsl N + Acc,
+    <<Bs:Len/binary, Rest2/binary>> = Rest,
+    NewFValue = id(d_msg_menu_choice(Bs, TrUserData),
+		   TrUserData),
+    dfp_read_field_def_req(Rest2, 0, 0, F1, F2, F3, F4,
+			   if F5 == undefined -> NewFValue;
+			      true ->
+				  merge_msg_menu_choice(F5, NewFValue,
+							TrUserData)
+			   end,
 			   TrUserData).
 
 
 skip_varint_req(<<1:1, _:7, Rest/binary>>, Z1, Z2, F1,
-		F2, F3, TrUserData) ->
-    skip_varint_req(Rest, Z1, Z2, F1, F2, F3, TrUserData);
+		F2, F3, F4, F5, TrUserData) ->
+    skip_varint_req(Rest, Z1, Z2, F1, F2, F3, F4, F5,
+		    TrUserData);
 skip_varint_req(<<0:1, _:7, Rest/binary>>, Z1, Z2, F1,
-		F2, F3, TrUserData) ->
-    dfp_read_field_def_req(Rest, Z1, Z2, F1, F2, F3,
+		F2, F3, F4, F5, TrUserData) ->
+    dfp_read_field_def_req(Rest, Z1, Z2, F1, F2, F3, F4, F5,
 			   TrUserData).
 
 
 skip_length_delimited_req(<<1:1, X:7, Rest/binary>>, N,
-			  Acc, F1, F2, F3, TrUserData)
+			  Acc, F1, F2, F3, F4, F5, TrUserData)
     when N < 57 ->
     skip_length_delimited_req(Rest, N + 7, X bsl N + Acc,
-			      F1, F2, F3, TrUserData);
+			      F1, F2, F3, F4, F5, TrUserData);
 skip_length_delimited_req(<<0:1, X:7, Rest/binary>>, N,
-			  Acc, F1, F2, F3, TrUserData) ->
+			  Acc, F1, F2, F3, F4, F5, TrUserData) ->
     Length = X bsl N + Acc,
     <<_:Length/binary, Rest2/binary>> = Rest,
-    dfp_read_field_def_req(Rest2, 0, 0, F1, F2, F3,
+    dfp_read_field_def_req(Rest2, 0, 0, F1, F2, F3, F4, F5,
 			   TrUserData).
 
 
 skip_32_req(<<_:32, Rest/binary>>, Z1, Z2, F1, F2, F3,
-	    TrUserData) ->
-    dfp_read_field_def_req(Rest, Z1, Z2, F1, F2, F3,
+	    F4, F5, TrUserData) ->
+    dfp_read_field_def_req(Rest, Z1, Z2, F1, F2, F3, F4, F5,
 			   TrUserData).
 
 
 skip_64_req(<<_:64, Rest/binary>>, Z1, Z2, F1, F2, F3,
-	    TrUserData) ->
-    dfp_read_field_def_req(Rest, Z1, Z2, F1, F2, F3,
+	    F4, F5, TrUserData) ->
+    dfp_read_field_def_req(Rest, Z1, Z2, F1, F2, F3, F4, F5,
 			   TrUserData).
 
 
@@ -610,6 +1137,8 @@ skip_64_envelope(<<_:64, Rest/binary>>, Z1, Z2, F1,
 
 'd_enum_req.type_enum'(1) -> create_session;
 'd_enum_req.type_enum'(2) -> server_message;
+'d_enum_req.type_enum'(3) -> options_list;
+'d_enum_req.type_enum'(4) -> menu_choice;
 'd_enum_req.type_enum'(V) -> V.
 
 
@@ -620,6 +1149,13 @@ merge_msgs(Prev, New, Opts)
     when element(1, Prev) =:= element(1, New) ->
     TrUserData = proplists:get_value(user_data, Opts),
     case Prev of
+      #'options_list.single_option'{} ->
+	  'merge_msg_options_list.single_option'(Prev, New,
+						 TrUserData);
+      #menu_choice{} ->
+	  merge_msg_menu_choice(Prev, New, TrUserData);
+      #options_list{} ->
+	  merge_msg_options_list(Prev, New, TrUserData);
       #server_message{} ->
 	  merge_msg_server_message(Prev, New, TrUserData);
       #create_session{} ->
@@ -627,6 +1163,37 @@ merge_msgs(Prev, New, Opts)
       #req{} -> merge_msg_req(Prev, New, TrUserData);
       #envelope{} -> merge_msg_envelope(Prev, New, TrUserData)
     end.
+
+'merge_msg_options_list.single_option'(#'options_list.single_option'{value
+									 =
+									 PFvalue},
+				       #'options_list.single_option'{key =
+									 NFkey,
+								     value =
+									 NFvalue},
+				       _) ->
+    #'options_list.single_option'{key = NFkey,
+				  value =
+				      if NFvalue =:= undefined -> PFvalue;
+					 true -> NFvalue
+				      end}.
+
+merge_msg_menu_choice(#menu_choice{choice = PFchoice},
+		      #menu_choice{choice = NFchoice}, TrUserData) ->
+    #menu_choice{choice =
+		     if PFchoice /= undefined, NFchoice /= undefined ->
+			    'merge_msg_options_list.single_option'(PFchoice,
+								   NFchoice,
+								   TrUserData);
+			PFchoice == undefined -> NFchoice;
+			NFchoice == undefined -> PFchoice
+		     end}.
+
+merge_msg_options_list(#options_list{options =
+					 PFoptions},
+		       #options_list{options = NFoptions}, TrUserData) ->
+    #options_list{options =
+		      'erlang_++'(PFoptions, NFoptions, TrUserData)}.
 
 merge_msg_server_message(#server_message{},
 			 #server_message{message = NFmessage}, _) ->
@@ -638,10 +1205,14 @@ merge_msg_create_session(#create_session{},
 
 merge_msg_req(#req{create_session_data =
 		       PFcreate_session_data,
-		   server_message_data = PFserver_message_data},
+		   server_message_data = PFserver_message_data,
+		   options_list_data = PFoptions_list_data,
+		   menu_choice_data = PFmenu_choice_data},
 	      #req{type = NFtype,
 		   create_session_data = NFcreate_session_data,
-		   server_message_data = NFserver_message_data},
+		   server_message_data = NFserver_message_data,
+		   options_list_data = NFoptions_list_data,
+		   menu_choice_data = NFmenu_choice_data},
 	      TrUserData) ->
     #req{type = NFtype,
 	 create_session_data =
@@ -663,6 +1234,22 @@ merge_msg_req(#req{create_session_data =
 		    NFserver_message_data;
 		NFserver_message_data == undefined ->
 		    PFserver_message_data
+	     end,
+	 options_list_data =
+	     if PFoptions_list_data /= undefined,
+		NFoptions_list_data /= undefined ->
+		    merge_msg_options_list(PFoptions_list_data,
+					   NFoptions_list_data, TrUserData);
+		PFoptions_list_data == undefined -> NFoptions_list_data;
+		NFoptions_list_data == undefined -> PFoptions_list_data
+	     end,
+	 menu_choice_data =
+	     if PFmenu_choice_data /= undefined,
+		NFmenu_choice_data /= undefined ->
+		    merge_msg_menu_choice(PFmenu_choice_data,
+					  NFmenu_choice_data, TrUserData);
+		PFmenu_choice_data == undefined -> NFmenu_choice_data;
+		NFmenu_choice_data == undefined -> PFmenu_choice_data
 	     end}.
 
 merge_msg_envelope(#envelope{uncompressed_data =
@@ -685,6 +1272,14 @@ verify_msg(Msg) -> verify_msg(Msg, []).
 verify_msg(Msg, Opts) ->
     TrUserData = proplists:get_value(user_data, Opts),
     case Msg of
+      #'options_list.single_option'{} ->
+	  'v_msg_options_list.single_option'(Msg,
+					     ['options_list.single_option'],
+					     TrUserData);
+      #menu_choice{} ->
+	  v_msg_menu_choice(Msg, [menu_choice], TrUserData);
+      #options_list{} ->
+	  v_msg_options_list(Msg, [options_list], TrUserData);
       #server_message{} ->
 	  v_msg_server_message(Msg, [server_message], TrUserData);
       #create_session{} ->
@@ -695,6 +1290,51 @@ verify_msg(Msg, Opts) ->
       _ -> mk_type_error(not_a_known_message, Msg, [])
     end.
 
+
+-dialyzer({nowarn_function,'v_msg_options_list.single_option'/3}).
+'v_msg_options_list.single_option'(#'options_list.single_option'{key
+								     = F1,
+								 value = F2},
+				   Path, _) ->
+    v_type_int32(F1, [key | Path]),
+    if F2 == undefined -> ok;
+       true -> v_type_string(F2, [value | Path])
+    end,
+    ok;
+'v_msg_options_list.single_option'(X, Path,
+				   _TrUserData) ->
+    mk_type_error({expected_msg,
+		   'options_list.single_option'},
+		  X, Path).
+
+-dialyzer({nowarn_function,v_msg_menu_choice/3}).
+v_msg_menu_choice(#menu_choice{choice = F1}, Path,
+		  TrUserData) ->
+    if F1 == undefined -> ok;
+       true ->
+	   'v_msg_options_list.single_option'(F1, [choice | Path],
+					      TrUserData)
+    end,
+    ok;
+v_msg_menu_choice(X, Path, _TrUserData) ->
+    mk_type_error({expected_msg, menu_choice}, X, Path).
+
+-dialyzer({nowarn_function,v_msg_options_list/3}).
+v_msg_options_list(#options_list{options = F1}, Path,
+		   TrUserData) ->
+    if is_list(F1) ->
+	   _ = ['v_msg_options_list.single_option'(Elem,
+						   [options | Path], TrUserData)
+		|| Elem <- F1],
+	   ok;
+       true ->
+	   mk_type_error({invalid_list_of,
+			  {msg, 'options_list.single_option'}},
+			 F1, Path)
+    end,
+    ok;
+v_msg_options_list(X, Path, _TrUserData) ->
+    mk_type_error({expected_msg, options_list}, X, Path).
 
 -dialyzer({nowarn_function,v_msg_server_message/3}).
 v_msg_server_message(#server_message{message = F1},
@@ -712,7 +1352,8 @@ v_msg_create_session(X, Path, _TrUserData) ->
 
 -dialyzer({nowarn_function,v_msg_req/3}).
 v_msg_req(#req{type = F1, create_session_data = F2,
-	       server_message_data = F3},
+	       server_message_data = F3, options_list_data = F4,
+	       menu_choice_data = F5},
 	  Path, TrUserData) ->
     'v_enum_req.type_enum'(F1, [type | Path]),
     if F2 == undefined -> ok;
@@ -724,6 +1365,16 @@ v_msg_req(#req{type = F1, create_session_data = F2,
        true ->
 	   v_msg_server_message(F3, [server_message_data | Path],
 				TrUserData)
+    end,
+    if F4 == undefined -> ok;
+       true ->
+	   v_msg_options_list(F4, [options_list_data | Path],
+			      TrUserData)
+    end,
+    if F5 == undefined -> ok;
+       true ->
+	   v_msg_menu_choice(F5, [menu_choice_data | Path],
+			     TrUserData)
     end,
     ok;
 v_msg_req(X, Path, _TrUserData) ->
@@ -738,6 +1389,8 @@ v_msg_envelope(#envelope{uncompressed_data = F1}, Path,
 -dialyzer({nowarn_function,'v_enum_req.type_enum'/2}).
 'v_enum_req.type_enum'(create_session, _Path) -> ok;
 'v_enum_req.type_enum'(server_message, _Path) -> ok;
+'v_enum_req.type_enum'(options_list, _Path) -> ok;
+'v_enum_req.type_enum'(menu_choice, _Path) -> ok;
 'v_enum_req.type_enum'(V, Path) when is_integer(V) ->
     v_type_sint32(V, Path);
 'v_enum_req.type_enum'(X, Path) ->
@@ -752,6 +1405,17 @@ v_type_sint32(N, Path) when is_integer(N) ->
 		  N, Path);
 v_type_sint32(X, Path) ->
     mk_type_error({bad_integer, sint32, signed, 32}, X,
+		  Path).
+
+-dialyzer({nowarn_function,v_type_int32/2}).
+v_type_int32(N, _Path)
+    when -2147483648 =< N, N =< 2147483647 ->
+    ok;
+v_type_int32(N, Path) when is_integer(N) ->
+    mk_type_error({value_out_of_range, int32, signed, 32},
+		  N, Path);
+v_type_int32(X, Path) ->
+    mk_type_error({bad_integer, int32, signed, 32}, X,
 		  Path).
 
 -dialyzer({nowarn_function,v_type_string/2}).
@@ -785,12 +1449,33 @@ prettify_path(PathR) ->
 -compile({inline,id/2}).
 id(X, _TrUserData) -> X.
 
+-compile({inline,cons/3}).
+cons(Elem, Acc, _TrUserData) -> [Elem | Acc].
+
+-compile({inline,lists_reverse/2}).
+'lists_reverse'(L, _TrUserData) -> lists:reverse(L).
+-compile({inline,'erlang_++'/3}).
+'erlang_++'(A, B, _TrUserData) -> A ++ B.
 
 
 
 get_msg_defs() ->
     [{{enum, 'req.type_enum'},
-      [{create_session, 1}, {server_message, 2}]},
+      [{create_session, 1}, {server_message, 2},
+       {options_list, 3}, {menu_choice, 4}]},
+     {{msg, 'options_list.single_option'},
+      [#field{name = key, fnum = 1, rnum = 2, type = int32,
+	      occurrence = required, opts = []},
+       #field{name = value, fnum = 2, rnum = 3, type = string,
+	      occurrence = optional, opts = []}]},
+     {{msg, menu_choice},
+      [#field{name = choice, fnum = 1, rnum = 2,
+	      type = {msg, 'options_list.single_option'},
+	      occurrence = optional, opts = []}]},
+     {{msg, options_list},
+      [#field{name = options, fnum = 1, rnum = 2,
+	      type = {msg, 'options_list.single_option'},
+	      occurrence = repeated, opts = []}]},
      {{msg, server_message},
       [#field{name = message, fnum = 1, rnum = 2,
 	      type = string, occurrence = required, opts = []}]},
@@ -806,6 +1491,12 @@ get_msg_defs() ->
 	      opts = []},
        #field{name = server_message_data, fnum = 3, rnum = 4,
 	      type = {msg, server_message}, occurrence = optional,
+	      opts = []},
+       #field{name = options_list_data, fnum = 4, rnum = 5,
+	      type = {msg, options_list}, occurrence = optional,
+	      opts = []},
+       #field{name = menu_choice_data, fnum = 5, rnum = 6,
+	      type = {msg, menu_choice}, occurrence = optional,
 	      opts = []}]},
      {{msg, envelope},
       [#field{name = uncompressed_data, fnum = 2, rnum = 2,
@@ -813,7 +1504,9 @@ get_msg_defs() ->
 
 
 get_msg_names() ->
-    [server_message, create_session, req, envelope].
+    ['options_list.single_option', menu_choice,
+     options_list, server_message, create_session, req,
+     envelope].
 
 
 get_enum_names() -> ['req.type_enum'].
@@ -833,6 +1526,19 @@ fetch_enum_def(EnumName) ->
     end.
 
 
+find_msg_def('options_list.single_option') ->
+    [#field{name = key, fnum = 1, rnum = 2, type = int32,
+	    occurrence = required, opts = []},
+     #field{name = value, fnum = 2, rnum = 3, type = string,
+	    occurrence = optional, opts = []}];
+find_msg_def(menu_choice) ->
+    [#field{name = choice, fnum = 1, rnum = 2,
+	    type = {msg, 'options_list.single_option'},
+	    occurrence = optional, opts = []}];
+find_msg_def(options_list) ->
+    [#field{name = options, fnum = 1, rnum = 2,
+	    type = {msg, 'options_list.single_option'},
+	    occurrence = repeated, opts = []}];
 find_msg_def(server_message) ->
     [#field{name = message, fnum = 1, rnum = 2,
 	    type = string, occurrence = required, opts = []}];
@@ -848,6 +1554,12 @@ find_msg_def(req) ->
 	    opts = []},
      #field{name = server_message_data, fnum = 3, rnum = 4,
 	    type = {msg, server_message}, occurrence = optional,
+	    opts = []},
+     #field{name = options_list_data, fnum = 4, rnum = 5,
+	    type = {msg, options_list}, occurrence = optional,
+	    opts = []},
+     #field{name = menu_choice_data, fnum = 5, rnum = 6,
+	    type = {msg, menu_choice}, occurrence = optional,
 	    opts = []}];
 find_msg_def(envelope) ->
     [#field{name = uncompressed_data, fnum = 2, rnum = 2,
@@ -856,7 +1568,8 @@ find_msg_def(_) -> error.
 
 
 find_enum_def('req.type_enum') ->
-    [{create_session, 1}, {server_message, 2}];
+    [{create_session, 1}, {server_message, 2},
+     {options_list, 3}, {menu_choice, 4}];
 find_enum_def(_) -> error.
 
 
@@ -871,13 +1584,17 @@ enum_value_by_symbol('req.type_enum', Sym) ->
 'enum_symbol_by_value_req.type_enum'(1) ->
     create_session;
 'enum_symbol_by_value_req.type_enum'(2) ->
-    server_message.
+    server_message;
+'enum_symbol_by_value_req.type_enum'(3) -> options_list;
+'enum_symbol_by_value_req.type_enum'(4) -> menu_choice.
 
 
 'enum_value_by_symbol_req.type_enum'(create_session) ->
     1;
 'enum_value_by_symbol_req.type_enum'(server_message) ->
-    2.
+    2;
+'enum_value_by_symbol_req.type_enum'(options_list) -> 3;
+'enum_value_by_symbol_req.type_enum'(menu_choice) -> 4.
 
 
 get_service_names() -> [].
