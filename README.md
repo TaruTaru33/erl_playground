@@ -94,4 +94,4 @@ You have two weeks.
 From client console:  
 * `sockclient:connect().`  
 * `sockclient:send_create_session(<User>).`  
-* `sockclient:send_menu_choice(<Choice>).`  
+* `sockclient:user_menu().`  
