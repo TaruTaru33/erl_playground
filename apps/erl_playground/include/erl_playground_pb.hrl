@@ -15,6 +15,27 @@
         }).
 -endif.
 
+-ifndef('WEATHER_PB_H').
+-define('WEATHER_PB_H', true).
+-record(weather,
+        {msg                    :: binary() | iolist() | undefined % = 1
+        }).
+-endif.
+
+-ifndef('ECHO_PB_H').
+-define('ECHO_PB_H', true).
+-record(echo,
+        {msg                    :: binary() | iolist() | undefined % = 1
+        }).
+-endif.
+
+-ifndef('QUESTION_PB_H').
+-define('QUESTION_PB_H', true).
+-record(question,
+        {msg                    :: binary() | iolist() | undefined % = 1
+        }).
+-endif.
+
 -ifndef('MENU_CHOICE_PB_H').
 -define('MENU_CHOICE_PB_H', true).
 -record(menu_choice,
@@ -46,11 +67,14 @@
 -ifndef('REQ_PB_H').
 -define('REQ_PB_H', true).
 -record(req,
-        {type                   :: 'create_session' | 'server_message' | 'options_list' | 'menu_choice' | integer(), % = 1, enum req.type_enum
+        {type                   :: 'create_session' | 'server_message' | 'options_list' | 'menu_choice' | 'weather' | 'question' | 'echo' | integer(), % = 1, enum req.type_enum
          create_session_data    :: #create_session{} | undefined, % = 2
          server_message_data    :: #server_message{} | undefined, % = 3
          options_list_data      :: #options_list{} | undefined, % = 4
-         menu_choice_data       :: #menu_choice{} | undefined % = 5
+         menu_choice_data       :: #menu_choice{} | undefined, % = 5
+         weather_data           :: #weather{} | undefined, % = 6
+         question_data          :: #question{} | undefined, % = 7
+         echo_data              :: #echo{} | undefined % = 8
         }).
 -endif.
 

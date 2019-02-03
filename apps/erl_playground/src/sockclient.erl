@@ -10,7 +10,8 @@
 -export([start_link/0]). -ignore_xref([{start_link, 4}]).
 -export([connect/0, disconnect/0]).
 -export([send_create_session/0, send_create_session/1]).
--export([send_menu_choice/1]).
+%%-export([send_menu_choice/1]).
+-export([user_menu/0]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -70,15 +71,6 @@ send_create_session(User) ->
 send_create_session() ->
     sockclient:send_create_session(<<"TestUser">>).
 
-%% Send the user choice from options menu
-send_menu_choice(Choice) ->
-    MenuChoice = #menu_choice {
-	choice = #'options_list.single_option'{
-            key = Choice
-        }
-    },
-    gen_server:cast(whereis(?SERVER), {menu_choice, MenuChoice}).
-
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
@@ -101,11 +93,35 @@ handle_cast({create_session, CreateSession}, #state{socket = Socket} = State)
 
     {noreply, State};
 
-handle_cast({menu_choice, MenuChoice}, #state{socket = Socket} = State)
+handle_cast({weather, Weather}, #state{socket = Socket} = State)
     when Socket =/= undefined ->
     Req = #req {
-        type = menu_choice,
-        menu_choice_data = MenuChoice
+        type = weather,
+        weather_data = Weather
+    },
+    Data = utils:add_envelope(Req),
+
+    gen_tcp:send(Socket, Data),
+
+    {noreply, State};
+
+handle_cast({question, Question}, #state{socket = Socket} = State)
+    when Socket =/= undefined ->
+    Req = #req {
+        type = question,
+        question_data = Question
+    },
+    Data = utils:add_envelope(Req),
+
+    gen_tcp:send(Socket, Data),
+
+    {noreply, State};
+
+handle_cast({echo, Echo}, #state{socket = Socket} = State)
+    when Socket =/= undefined ->
+    Req = #req {
+        type = echo,
+        echo_data = Echo
     },
     Data = utils:add_envelope(Req),
 
@@ -176,59 +192,126 @@ process_packet(#req{ type = Type } = Req, State, _Now) ->
     io:format("Welcome ~s!\n", [Message]);
     
     %% XXX will spawn another process to avoid callback locking?
-    %%PID =  spawn(fun() -> handle_user_interaction() end),
+    %%PID =  spawn(fun() -> user_menu() end),
     %%register(menuhandler, PID);
     %%io:fwrite("~p~n",[registered()]);
 
     %% ----------------------
-    %% Message type Options List  *******************
+    %% Message type Weather Message  ******************
     %% ----------------------
-    options_list ->
+    weather -> 
     #req{
-        options_list_data = #options_list{
-            options = Options
+        weather_data = #weather{
+            msg = Msg
         }
     } = Req,
-    
-    %% XXX find spawned process. 
-    %%io:fwrite("~p~n",[whereis(menuhandler)]),
-    %%whereis(menuhandler) ! {optionlist, Options}
+    io:format("Weather ~s!\n", [Msg]);
+    %% XXX call user_menu here?
+    %%user_menu();
 
-    %% print Options Menu
-    choose_menu(Options)
-    %%io:format("Choosen Option: ~d", Choice)
+    %% ----------------------
+    %% Message type Question Message  ******************
+    %% ----------------------
+    question -> 
+    #req{
+        question_data = #question{
+            msg = Msg
+        }
+    } = Req,
+    io:format("~s!\n", [Msg]);
+    %% XXX call user_menu here?
+    %%user_menu();
+
+    %% ----------------------
+    %% Message type Question Message  ******************
+    %% ----------------------
+    echo ->
+    #req{
+        echo_data = #echo{
+            msg = Msg
+        }
+    } = Req,
+    io:format("~s!\n", [Msg]),
+    %% connect to echo server
+    {ok, Host} = application:get_env(erl_playground, tcp_host),
+    {ok, Port} = application:get_env(erl_playground, tcp_port),
+    {ok, Sock} = gen_tcp:connect(Host, Port+1, 
+                                 [binary, {packet, 0}]),
+    %%_ = rand:seed(exs1024),
+    handle_echo_connection(Sock)	
+    %% XXX call user_menu here?
+    %%user_menu();
     end,
     State.
 
-%% TODO should probably handle user choice but it's not working for now
-%% send_menu_choice should be called from user
-choose_menu(Opts) ->
-    lists:foldl(fun(X, Index) -> 
-	#'options_list.single_option'{
-            key = Key,
-            value = Value
-        } = X,
-        io:format("~p. ~s~n", [Key, Value]),
-        %%io:format("~p to ~p~n", [Index, X]),
-        Index+1 
-        end, 
-        1, Opts).
-    %% XXX fread not working if is called inside another function?
-    %%{ok, [Choice]}= io:fread("Choose an Option: ", "~d"),
-    %%io:format("Choosen Option: ~d", Choice),
-    %%Choice.
+%% XXX should be internal but fread not working when called by another function (process?)
+user_menu() ->
+    io:format("1. Press 1 to receive the Weather forecast.~n"),
+    io:format("2. Press 2 to receive the Answer to the Ultimate Question of Life, the Universe and Everything.~n"),
+    io:format("3. Press 3 to speak with an operator.~n"),
+    {ok, [Choice]} = io:fread("Choose an Option: ", "~d"),
+    case Choice of
+    1 -> 
+    send_weather_request();
+    2 -> 
+    send_question_request();
+    3 ->
+    send_echo_request();
+    _ -> 
+    _ = lager:info("Invalid Choice")
+    end,
+    Choice.
 
-%% XXX Handles messages on a spawned process. 
-%% avoid callback locking?
-%% fread is not working if this function is called inside another function?
-%%handle_user_interaction() ->
-%%    receive
-%%        {optionlist, OptionList} ->
-%%            lists:foldl(fun(X, Index) -> io:format(" Press ~p to ~s~n", [Index, X]), Index+1 end, 1, OptionList),
-%%            case io:fread("Choose an Option: ", "~d") of
-%%                {ok, [Choice]} ->
-%%                    io:format("Choosen Option: ~d", Choice),
-%%                    Choice
-%%            end
-%%    end.
-    
+send_weather_request() ->
+    Weather = #weather {
+    },
+    gen_server:cast(whereis(?SERVER), {weather, Weather}).
+
+send_question_request() ->
+    Question = #question {
+    },
+    gen_server:cast(whereis(?SERVER), {question, Question}).
+
+send_echo_request() ->
+    Echo = #echo {
+    },
+    gen_server:cast(whereis(?SERVER), {echo, Echo}).
+
+
+%% Echo server message handling
+handle_echo_connection(Socket) ->
+
+     receive
+
+         {tcp, Socket, Data} ->
+
+             ok = io:format("~p: Client Received ~p~n", [self(), Data]),
+
+             %% XXX check. not working. use a random sleep and send a message automatically
+             %%{ok, [Val]}= io:fread("Send to server: ", "~d"),
+             Val = rand:uniform(5),
+             _ = lager:info("Sleep for ~p.~n", [Val]),
+             timer:sleep(timer:seconds(Val)),
+             Ret = gen_tcp:send(Socket, [Val]),
+             case Ret of
+             ok -> 
+                 handle_echo_connection(Socket);
+             _ -> 
+                 _ = lager:info("Socket Closed. exit."),
+                 exit(normal)
+             end;
+             
+
+         {tcp_closed, Socket} ->
+
+             ok = io:format("~p: Connection closed.~n", [self()]),
+
+             exit(normal);
+
+         _ ->
+
+             ok = io:format("Error. Closing.~n"),
+
+             exit(normal)
+
+     end.

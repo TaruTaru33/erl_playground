@@ -25,18 +25,21 @@
 -include("gpb.hrl").
 
 %% enumerated types
--type 'req.type_enum'() :: 'create_session' | 'server_message' | 'options_list' | 'menu_choice'.
+-type 'req.type_enum'() :: 'create_session' | 'server_message' | 'options_list' | 'menu_choice' | 'weather' | 'question' | 'echo'.
 -export_type(['req.type_enum'/0]).
 
 %% message types
 -type 'options_list.single_option'() :: #'options_list.single_option'{}.
+-type weather() :: #weather{}.
+-type echo() :: #echo{}.
+-type question() :: #question{}.
 -type menu_choice() :: #menu_choice{}.
 -type options_list() :: #options_list{}.
 -type server_message() :: #server_message{}.
 -type create_session() :: #create_session{}.
 -type req() :: #req{}.
 -type envelope() :: #envelope{}.
--export_type(['options_list.single_option'/0, 'menu_choice'/0, 'options_list'/0, 'server_message'/0, 'create_session'/0, 'req'/0, 'envelope'/0]).
+-export_type(['options_list.single_option'/0, 'weather'/0, 'echo'/0, 'question'/0, 'menu_choice'/0, 'options_list'/0, 'server_message'/0, 'create_session'/0, 'req'/0, 'envelope'/0]).
 
 
 -spec encode_msg(_) -> binary().
@@ -50,6 +53,9 @@ encode_msg(Msg, Opts) ->
     case Msg of
       #'options_list.single_option'{} ->
 	  'e_msg_options_list.single_option'(Msg, TrUserData);
+      #weather{} -> e_msg_weather(Msg, TrUserData);
+      #echo{} -> e_msg_echo(Msg, TrUserData);
+      #question{} -> e_msg_question(Msg, TrUserData);
       #menu_choice{} -> e_msg_menu_choice(Msg, TrUserData);
       #options_list{} -> e_msg_options_list(Msg, TrUserData);
       #server_message{} ->
@@ -80,6 +86,45 @@ encode_msg(Msg, Opts) ->
 	   begin
 	     TrF2 = id(F2, TrUserData),
 	     e_type_string(TrF2, <<B1/binary, 18>>)
+	   end
+    end.
+
+e_msg_weather(Msg, TrUserData) ->
+    e_msg_weather(Msg, <<>>, TrUserData).
+
+
+e_msg_weather(#weather{msg = F1}, Bin, TrUserData) ->
+    if F1 == undefined -> Bin;
+       true ->
+	   begin
+	     TrF1 = id(F1, TrUserData),
+	     e_type_string(TrF1, <<Bin/binary, 10>>)
+	   end
+    end.
+
+e_msg_echo(Msg, TrUserData) ->
+    e_msg_echo(Msg, <<>>, TrUserData).
+
+
+e_msg_echo(#echo{msg = F1}, Bin, TrUserData) ->
+    if F1 == undefined -> Bin;
+       true ->
+	   begin
+	     TrF1 = id(F1, TrUserData),
+	     e_type_string(TrF1, <<Bin/binary, 10>>)
+	   end
+    end.
+
+e_msg_question(Msg, TrUserData) ->
+    e_msg_question(Msg, <<>>, TrUserData).
+
+
+e_msg_question(#question{msg = F1}, Bin, TrUserData) ->
+    if F1 == undefined -> Bin;
+       true ->
+	   begin
+	     TrF1 = id(F1, TrUserData),
+	     e_type_string(TrF1, <<Bin/binary, 10>>)
 	   end
     end.
 
@@ -140,7 +185,8 @@ e_msg_req(Msg, TrUserData) ->
 
 e_msg_req(#req{type = F1, create_session_data = F2,
 	       server_message_data = F3, options_list_data = F4,
-	       menu_choice_data = F5},
+	       menu_choice_data = F5, weather_data = F6,
+	       question_data = F7, echo_data = F8},
 	  Bin, TrUserData) ->
     B1 = begin
 	   TrF1 = id(F1, TrUserData),
@@ -172,12 +218,36 @@ e_msg_req(#req{type = F1, create_session_data = F2,
 						 TrUserData)
 		end
 	 end,
-    if F5 == undefined -> B4;
+    B5 = if F5 == undefined -> B4;
+	    true ->
+		begin
+		  TrF5 = id(F5, TrUserData),
+		  e_mfield_req_menu_choice_data(TrF5, <<B4/binary, 42>>,
+						TrUserData)
+		end
+	 end,
+    B6 = if F6 == undefined -> B5;
+	    true ->
+		begin
+		  TrF6 = id(F6, TrUserData),
+		  e_mfield_req_weather_data(TrF6, <<B5/binary, 50>>,
+					    TrUserData)
+		end
+	 end,
+    B7 = if F7 == undefined -> B6;
+	    true ->
+		begin
+		  TrF7 = id(F7, TrUserData),
+		  e_mfield_req_question_data(TrF7, <<B6/binary, 58>>,
+					     TrUserData)
+		end
+	 end,
+    if F8 == undefined -> B7;
        true ->
 	   begin
-	     TrF5 = id(F5, TrUserData),
-	     e_mfield_req_menu_choice_data(TrF5, <<B4/binary, 42>>,
-					   TrUserData)
+	     TrF8 = id(F8, TrUserData),
+	     e_mfield_req_echo_data(TrF8, <<B7/binary, 66>>,
+				    TrUserData)
 	   end
     end.
 
@@ -237,6 +307,21 @@ e_mfield_req_menu_choice_data(Msg, Bin, TrUserData) ->
     Bin2 = e_varint(byte_size(SubBin), Bin),
     <<Bin2/binary, SubBin/binary>>.
 
+e_mfield_req_weather_data(Msg, Bin, TrUserData) ->
+    SubBin = e_msg_weather(Msg, <<>>, TrUserData),
+    Bin2 = e_varint(byte_size(SubBin), Bin),
+    <<Bin2/binary, SubBin/binary>>.
+
+e_mfield_req_question_data(Msg, Bin, TrUserData) ->
+    SubBin = e_msg_question(Msg, <<>>, TrUserData),
+    Bin2 = e_varint(byte_size(SubBin), Bin),
+    <<Bin2/binary, SubBin/binary>>.
+
+e_mfield_req_echo_data(Msg, Bin, TrUserData) ->
+    SubBin = e_msg_echo(Msg, <<>>, TrUserData),
+    Bin2 = e_varint(byte_size(SubBin), Bin),
+    <<Bin2/binary, SubBin/binary>>.
+
 e_mfield_envelope_uncompressed_data(Msg, Bin,
 				    TrUserData) ->
     SubBin = e_msg_req(Msg, <<>>, TrUserData),
@@ -253,6 +338,11 @@ e_mfield_envelope_uncompressed_data(Msg, Bin,
     <<Bin/binary, 3>>;
 'e_enum_req.type_enum'(menu_choice, Bin) ->
     <<Bin/binary, 4>>;
+'e_enum_req.type_enum'(weather, Bin) ->
+    <<Bin/binary, 5>>;
+'e_enum_req.type_enum'(question, Bin) ->
+    <<Bin/binary, 6>>;
+'e_enum_req.type_enum'(echo, Bin) -> <<Bin/binary, 7>>;
 'e_enum_req.type_enum'(V, Bin) -> e_varint(V, Bin).
 
 e_type_int32(Value, Bin)
@@ -282,6 +372,9 @@ decode_msg(Bin, MsgName, Opts) when is_binary(Bin) ->
     case MsgName of
       'options_list.single_option' ->
 	  'd_msg_options_list.single_option'(Bin, TrUserData);
+      weather -> d_msg_weather(Bin, TrUserData);
+      echo -> d_msg_echo(Bin, TrUserData);
+      question -> d_msg_question(Bin, TrUserData);
       menu_choice -> d_msg_menu_choice(Bin, TrUserData);
       options_list -> d_msg_options_list(Bin, TrUserData);
       server_message -> d_msg_server_message(Bin, TrUserData);
@@ -431,6 +524,256 @@ decode_msg(Bin, MsgName, Opts) when is_binary(Bin) ->
 				     Z1, Z2, F1, F2, TrUserData) ->
     'dfp_read_field_def_options_list.single_option'(Rest,
 						    Z1, Z2, F1, F2, TrUserData).
+
+
+d_msg_weather(Bin, TrUserData) ->
+    dfp_read_field_def_weather(Bin, 0, 0,
+			       id(undefined, TrUserData), TrUserData).
+
+dfp_read_field_def_weather(<<10, Rest/binary>>, Z1, Z2,
+			   F1, TrUserData) ->
+    d_field_weather_msg(Rest, Z1, Z2, F1, TrUserData);
+dfp_read_field_def_weather(<<>>, 0, 0, F1, _) ->
+    #weather{msg = F1};
+dfp_read_field_def_weather(Other, Z1, Z2, F1,
+			   TrUserData) ->
+    dg_read_field_def_weather(Other, Z1, Z2, F1,
+			      TrUserData).
+
+dg_read_field_def_weather(<<1:1, X:7, Rest/binary>>, N,
+			  Acc, F1, TrUserData)
+    when N < 32 - 7 ->
+    dg_read_field_def_weather(Rest, N + 7, X bsl N + Acc,
+			      F1, TrUserData);
+dg_read_field_def_weather(<<0:1, X:7, Rest/binary>>, N,
+			  Acc, F1, TrUserData) ->
+    Key = X bsl N + Acc,
+    case Key of
+      10 -> d_field_weather_msg(Rest, 0, 0, F1, TrUserData);
+      _ ->
+	  case Key band 7 of
+	    0 -> skip_varint_weather(Rest, 0, 0, F1, TrUserData);
+	    1 -> skip_64_weather(Rest, 0, 0, F1, TrUserData);
+	    2 ->
+		skip_length_delimited_weather(Rest, 0, 0, F1,
+					      TrUserData);
+	    5 -> skip_32_weather(Rest, 0, 0, F1, TrUserData)
+	  end
+    end;
+dg_read_field_def_weather(<<>>, 0, 0, F1, _) ->
+    #weather{msg = F1}.
+
+d_field_weather_msg(<<1:1, X:7, Rest/binary>>, N, Acc,
+		    F1, TrUserData)
+    when N < 57 ->
+    d_field_weather_msg(Rest, N + 7, X bsl N + Acc, F1,
+			TrUserData);
+d_field_weather_msg(<<0:1, X:7, Rest/binary>>, N, Acc,
+		    _, TrUserData) ->
+    Len = X bsl N + Acc,
+    <<Bytes:Len/binary, Rest2/binary>> = Rest,
+    NewFValue = binary:copy(Bytes),
+    dfp_read_field_def_weather(Rest2, 0, 0, NewFValue,
+			       TrUserData).
+
+
+skip_varint_weather(<<1:1, _:7, Rest/binary>>, Z1, Z2,
+		    F1, TrUserData) ->
+    skip_varint_weather(Rest, Z1, Z2, F1, TrUserData);
+skip_varint_weather(<<0:1, _:7, Rest/binary>>, Z1, Z2,
+		    F1, TrUserData) ->
+    dfp_read_field_def_weather(Rest, Z1, Z2, F1,
+			       TrUserData).
+
+
+skip_length_delimited_weather(<<1:1, X:7, Rest/binary>>,
+			      N, Acc, F1, TrUserData)
+    when N < 57 ->
+    skip_length_delimited_weather(Rest, N + 7,
+				  X bsl N + Acc, F1, TrUserData);
+skip_length_delimited_weather(<<0:1, X:7, Rest/binary>>,
+			      N, Acc, F1, TrUserData) ->
+    Length = X bsl N + Acc,
+    <<_:Length/binary, Rest2/binary>> = Rest,
+    dfp_read_field_def_weather(Rest2, 0, 0, F1, TrUserData).
+
+
+skip_32_weather(<<_:32, Rest/binary>>, Z1, Z2, F1,
+		TrUserData) ->
+    dfp_read_field_def_weather(Rest, Z1, Z2, F1,
+			       TrUserData).
+
+
+skip_64_weather(<<_:64, Rest/binary>>, Z1, Z2, F1,
+		TrUserData) ->
+    dfp_read_field_def_weather(Rest, Z1, Z2, F1,
+			       TrUserData).
+
+
+d_msg_echo(Bin, TrUserData) ->
+    dfp_read_field_def_echo(Bin, 0, 0,
+			    id(undefined, TrUserData), TrUserData).
+
+dfp_read_field_def_echo(<<10, Rest/binary>>, Z1, Z2, F1,
+			TrUserData) ->
+    d_field_echo_msg(Rest, Z1, Z2, F1, TrUserData);
+dfp_read_field_def_echo(<<>>, 0, 0, F1, _) ->
+    #echo{msg = F1};
+dfp_read_field_def_echo(Other, Z1, Z2, F1,
+			TrUserData) ->
+    dg_read_field_def_echo(Other, Z1, Z2, F1, TrUserData).
+
+dg_read_field_def_echo(<<1:1, X:7, Rest/binary>>, N,
+		       Acc, F1, TrUserData)
+    when N < 32 - 7 ->
+    dg_read_field_def_echo(Rest, N + 7, X bsl N + Acc, F1,
+			   TrUserData);
+dg_read_field_def_echo(<<0:1, X:7, Rest/binary>>, N,
+		       Acc, F1, TrUserData) ->
+    Key = X bsl N + Acc,
+    case Key of
+      10 -> d_field_echo_msg(Rest, 0, 0, F1, TrUserData);
+      _ ->
+	  case Key band 7 of
+	    0 -> skip_varint_echo(Rest, 0, 0, F1, TrUserData);
+	    1 -> skip_64_echo(Rest, 0, 0, F1, TrUserData);
+	    2 ->
+		skip_length_delimited_echo(Rest, 0, 0, F1, TrUserData);
+	    5 -> skip_32_echo(Rest, 0, 0, F1, TrUserData)
+	  end
+    end;
+dg_read_field_def_echo(<<>>, 0, 0, F1, _) ->
+    #echo{msg = F1}.
+
+d_field_echo_msg(<<1:1, X:7, Rest/binary>>, N, Acc, F1,
+		 TrUserData)
+    when N < 57 ->
+    d_field_echo_msg(Rest, N + 7, X bsl N + Acc, F1,
+		     TrUserData);
+d_field_echo_msg(<<0:1, X:7, Rest/binary>>, N, Acc, _,
+		 TrUserData) ->
+    Len = X bsl N + Acc,
+    <<Bytes:Len/binary, Rest2/binary>> = Rest,
+    NewFValue = binary:copy(Bytes),
+    dfp_read_field_def_echo(Rest2, 0, 0, NewFValue,
+			    TrUserData).
+
+
+skip_varint_echo(<<1:1, _:7, Rest/binary>>, Z1, Z2, F1,
+		 TrUserData) ->
+    skip_varint_echo(Rest, Z1, Z2, F1, TrUserData);
+skip_varint_echo(<<0:1, _:7, Rest/binary>>, Z1, Z2, F1,
+		 TrUserData) ->
+    dfp_read_field_def_echo(Rest, Z1, Z2, F1, TrUserData).
+
+
+skip_length_delimited_echo(<<1:1, X:7, Rest/binary>>, N,
+			   Acc, F1, TrUserData)
+    when N < 57 ->
+    skip_length_delimited_echo(Rest, N + 7, X bsl N + Acc,
+			       F1, TrUserData);
+skip_length_delimited_echo(<<0:1, X:7, Rest/binary>>, N,
+			   Acc, F1, TrUserData) ->
+    Length = X bsl N + Acc,
+    <<_:Length/binary, Rest2/binary>> = Rest,
+    dfp_read_field_def_echo(Rest2, 0, 0, F1, TrUserData).
+
+
+skip_32_echo(<<_:32, Rest/binary>>, Z1, Z2, F1,
+	     TrUserData) ->
+    dfp_read_field_def_echo(Rest, Z1, Z2, F1, TrUserData).
+
+
+skip_64_echo(<<_:64, Rest/binary>>, Z1, Z2, F1,
+	     TrUserData) ->
+    dfp_read_field_def_echo(Rest, Z1, Z2, F1, TrUserData).
+
+
+d_msg_question(Bin, TrUserData) ->
+    dfp_read_field_def_question(Bin, 0, 0,
+				id(undefined, TrUserData), TrUserData).
+
+dfp_read_field_def_question(<<10, Rest/binary>>, Z1, Z2,
+			    F1, TrUserData) ->
+    d_field_question_msg(Rest, Z1, Z2, F1, TrUserData);
+dfp_read_field_def_question(<<>>, 0, 0, F1, _) ->
+    #question{msg = F1};
+dfp_read_field_def_question(Other, Z1, Z2, F1,
+			    TrUserData) ->
+    dg_read_field_def_question(Other, Z1, Z2, F1,
+			       TrUserData).
+
+dg_read_field_def_question(<<1:1, X:7, Rest/binary>>, N,
+			   Acc, F1, TrUserData)
+    when N < 32 - 7 ->
+    dg_read_field_def_question(Rest, N + 7, X bsl N + Acc,
+			       F1, TrUserData);
+dg_read_field_def_question(<<0:1, X:7, Rest/binary>>, N,
+			   Acc, F1, TrUserData) ->
+    Key = X bsl N + Acc,
+    case Key of
+      10 -> d_field_question_msg(Rest, 0, 0, F1, TrUserData);
+      _ ->
+	  case Key band 7 of
+	    0 -> skip_varint_question(Rest, 0, 0, F1, TrUserData);
+	    1 -> skip_64_question(Rest, 0, 0, F1, TrUserData);
+	    2 ->
+		skip_length_delimited_question(Rest, 0, 0, F1,
+					       TrUserData);
+	    5 -> skip_32_question(Rest, 0, 0, F1, TrUserData)
+	  end
+    end;
+dg_read_field_def_question(<<>>, 0, 0, F1, _) ->
+    #question{msg = F1}.
+
+d_field_question_msg(<<1:1, X:7, Rest/binary>>, N, Acc,
+		     F1, TrUserData)
+    when N < 57 ->
+    d_field_question_msg(Rest, N + 7, X bsl N + Acc, F1,
+			 TrUserData);
+d_field_question_msg(<<0:1, X:7, Rest/binary>>, N, Acc,
+		     _, TrUserData) ->
+    Len = X bsl N + Acc,
+    <<Bytes:Len/binary, Rest2/binary>> = Rest,
+    NewFValue = binary:copy(Bytes),
+    dfp_read_field_def_question(Rest2, 0, 0, NewFValue,
+				TrUserData).
+
+
+skip_varint_question(<<1:1, _:7, Rest/binary>>, Z1, Z2,
+		     F1, TrUserData) ->
+    skip_varint_question(Rest, Z1, Z2, F1, TrUserData);
+skip_varint_question(<<0:1, _:7, Rest/binary>>, Z1, Z2,
+		     F1, TrUserData) ->
+    dfp_read_field_def_question(Rest, Z1, Z2, F1,
+				TrUserData).
+
+
+skip_length_delimited_question(<<1:1, X:7,
+				 Rest/binary>>,
+			       N, Acc, F1, TrUserData)
+    when N < 57 ->
+    skip_length_delimited_question(Rest, N + 7,
+				   X bsl N + Acc, F1, TrUserData);
+skip_length_delimited_question(<<0:1, X:7,
+				 Rest/binary>>,
+			       N, Acc, F1, TrUserData) ->
+    Length = X bsl N + Acc,
+    <<_:Length/binary, Rest2/binary>> = Rest,
+    dfp_read_field_def_question(Rest2, 0, 0, F1,
+				TrUserData).
+
+
+skip_32_question(<<_:32, Rest/binary>>, Z1, Z2, F1,
+		 TrUserData) ->
+    dfp_read_field_def_question(Rest, Z1, Z2, F1,
+				TrUserData).
+
+
+skip_64_question(<<_:64, Rest/binary>>, Z1, Z2, F1,
+		 TrUserData) ->
+    dfp_read_field_def_question(Rest, Z1, Z2, F1,
+				TrUserData).
 
 
 d_msg_menu_choice(Bin, TrUserData) ->
@@ -825,106 +1168,135 @@ d_msg_req(Bin, TrUserData) ->
     dfp_read_field_def_req(Bin, 0, 0,
 			   id(undefined, TrUserData), id(undefined, TrUserData),
 			   id(undefined, TrUserData), id(undefined, TrUserData),
-			   id(undefined, TrUserData), TrUserData).
+			   id(undefined, TrUserData), id(undefined, TrUserData),
+			   id(undefined, TrUserData), id(undefined, TrUserData),
+			   TrUserData).
 
 dfp_read_field_def_req(<<8, Rest/binary>>, Z1, Z2, F1,
-		       F2, F3, F4, F5, TrUserData) ->
-    d_field_req_type(Rest, Z1, Z2, F1, F2, F3, F4, F5,
-		     TrUserData);
+		       F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
+    d_field_req_type(Rest, Z1, Z2, F1, F2, F3, F4, F5, F6,
+		     F7, F8, TrUserData);
 dfp_read_field_def_req(<<18, Rest/binary>>, Z1, Z2, F1,
-		       F2, F3, F4, F5, TrUserData) ->
+		       F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
     d_field_req_create_session_data(Rest, Z1, Z2, F1, F2,
-				    F3, F4, F5, TrUserData);
+				    F3, F4, F5, F6, F7, F8, TrUserData);
 dfp_read_field_def_req(<<26, Rest/binary>>, Z1, Z2, F1,
-		       F2, F3, F4, F5, TrUserData) ->
+		       F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
     d_field_req_server_message_data(Rest, Z1, Z2, F1, F2,
-				    F3, F4, F5, TrUserData);
+				    F3, F4, F5, F6, F7, F8, TrUserData);
 dfp_read_field_def_req(<<34, Rest/binary>>, Z1, Z2, F1,
-		       F2, F3, F4, F5, TrUserData) ->
+		       F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
     d_field_req_options_list_data(Rest, Z1, Z2, F1, F2, F3,
-				  F4, F5, TrUserData);
+				  F4, F5, F6, F7, F8, TrUserData);
 dfp_read_field_def_req(<<42, Rest/binary>>, Z1, Z2, F1,
-		       F2, F3, F4, F5, TrUserData) ->
+		       F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
     d_field_req_menu_choice_data(Rest, Z1, Z2, F1, F2, F3,
-				 F4, F5, TrUserData);
+				 F4, F5, F6, F7, F8, TrUserData);
+dfp_read_field_def_req(<<50, Rest/binary>>, Z1, Z2, F1,
+		       F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
+    d_field_req_weather_data(Rest, Z1, Z2, F1, F2, F3, F4,
+			     F5, F6, F7, F8, TrUserData);
+dfp_read_field_def_req(<<58, Rest/binary>>, Z1, Z2, F1,
+		       F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
+    d_field_req_question_data(Rest, Z1, Z2, F1, F2, F3, F4,
+			      F5, F6, F7, F8, TrUserData);
+dfp_read_field_def_req(<<66, Rest/binary>>, Z1, Z2, F1,
+		       F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
+    d_field_req_echo_data(Rest, Z1, Z2, F1, F2, F3, F4, F5,
+			  F6, F7, F8, TrUserData);
 dfp_read_field_def_req(<<>>, 0, 0, F1, F2, F3, F4, F5,
-		       _) ->
+		       F6, F7, F8, _) ->
     #req{type = F1, create_session_data = F2,
 	 server_message_data = F3, options_list_data = F4,
-	 menu_choice_data = F5};
+	 menu_choice_data = F5, weather_data = F6,
+	 question_data = F7, echo_data = F8};
 dfp_read_field_def_req(Other, Z1, Z2, F1, F2, F3, F4,
-		       F5, TrUserData) ->
+		       F5, F6, F7, F8, TrUserData) ->
     dg_read_field_def_req(Other, Z1, Z2, F1, F2, F3, F4, F5,
-			  TrUserData).
+			  F6, F7, F8, TrUserData).
 
 dg_read_field_def_req(<<1:1, X:7, Rest/binary>>, N, Acc,
-		      F1, F2, F3, F4, F5, TrUserData)
+		      F1, F2, F3, F4, F5, F6, F7, F8, TrUserData)
     when N < 32 - 7 ->
     dg_read_field_def_req(Rest, N + 7, X bsl N + Acc, F1,
-			  F2, F3, F4, F5, TrUserData);
+			  F2, F3, F4, F5, F6, F7, F8, TrUserData);
 dg_read_field_def_req(<<0:1, X:7, Rest/binary>>, N, Acc,
-		      F1, F2, F3, F4, F5, TrUserData) ->
+		      F1, F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
     Key = X bsl N + Acc,
     case Key of
       8 ->
-	  d_field_req_type(Rest, 0, 0, F1, F2, F3, F4, F5,
-			   TrUserData);
+	  d_field_req_type(Rest, 0, 0, F1, F2, F3, F4, F5, F6, F7,
+			   F8, TrUserData);
       18 ->
 	  d_field_req_create_session_data(Rest, 0, 0, F1, F2, F3,
-					  F4, F5, TrUserData);
+					  F4, F5, F6, F7, F8, TrUserData);
       26 ->
 	  d_field_req_server_message_data(Rest, 0, 0, F1, F2, F3,
-					  F4, F5, TrUserData);
+					  F4, F5, F6, F7, F8, TrUserData);
       34 ->
 	  d_field_req_options_list_data(Rest, 0, 0, F1, F2, F3,
-					F4, F5, TrUserData);
+					F4, F5, F6, F7, F8, TrUserData);
       42 ->
 	  d_field_req_menu_choice_data(Rest, 0, 0, F1, F2, F3, F4,
-				       F5, TrUserData);
+				       F5, F6, F7, F8, TrUserData);
+      50 ->
+	  d_field_req_weather_data(Rest, 0, 0, F1, F2, F3, F4, F5,
+				   F6, F7, F8, TrUserData);
+      58 ->
+	  d_field_req_question_data(Rest, 0, 0, F1, F2, F3, F4,
+				    F5, F6, F7, F8, TrUserData);
+      66 ->
+	  d_field_req_echo_data(Rest, 0, 0, F1, F2, F3, F4, F5,
+				F6, F7, F8, TrUserData);
       _ ->
 	  case Key band 7 of
 	    0 ->
-		skip_varint_req(Rest, 0, 0, F1, F2, F3, F4, F5,
-				TrUserData);
+		skip_varint_req(Rest, 0, 0, F1, F2, F3, F4, F5, F6, F7,
+				F8, TrUserData);
 	    1 ->
-		skip_64_req(Rest, 0, 0, F1, F2, F3, F4, F5, TrUserData);
+		skip_64_req(Rest, 0, 0, F1, F2, F3, F4, F5, F6, F7, F8,
+			    TrUserData);
 	    2 ->
 		skip_length_delimited_req(Rest, 0, 0, F1, F2, F3, F4,
-					  F5, TrUserData);
+					  F5, F6, F7, F8, TrUserData);
 	    5 ->
-		skip_32_req(Rest, 0, 0, F1, F2, F3, F4, F5, TrUserData)
+		skip_32_req(Rest, 0, 0, F1, F2, F3, F4, F5, F6, F7, F8,
+			    TrUserData)
 	  end
     end;
 dg_read_field_def_req(<<>>, 0, 0, F1, F2, F3, F4, F5,
-		      _) ->
+		      F6, F7, F8, _) ->
     #req{type = F1, create_session_data = F2,
 	 server_message_data = F3, options_list_data = F4,
-	 menu_choice_data = F5}.
+	 menu_choice_data = F5, weather_data = F6,
+	 question_data = F7, echo_data = F8}.
 
 d_field_req_type(<<1:1, X:7, Rest/binary>>, N, Acc, F1,
-		 F2, F3, F4, F5, TrUserData)
+		 F2, F3, F4, F5, F6, F7, F8, TrUserData)
     when N < 57 ->
     d_field_req_type(Rest, N + 7, X bsl N + Acc, F1, F2, F3,
-		     F4, F5, TrUserData);
+		     F4, F5, F6, F7, F8, TrUserData);
 d_field_req_type(<<0:1, X:7, Rest/binary>>, N, Acc, _,
-		 F2, F3, F4, F5, TrUserData) ->
+		 F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
     <<Tmp:32/signed-native>> = <<(X bsl N +
 				    Acc):32/unsigned-native>>,
     NewFValue = 'd_enum_req.type_enum'(Tmp),
     dfp_read_field_def_req(Rest, 0, 0, NewFValue, F2, F3,
-			   F4, F5, TrUserData).
+			   F4, F5, F6, F7, F8, TrUserData).
 
 
 d_field_req_create_session_data(<<1:1, X:7,
 				  Rest/binary>>,
-				N, Acc, F1, F2, F3, F4, F5, TrUserData)
+				N, Acc, F1, F2, F3, F4, F5, F6, F7, F8,
+				TrUserData)
     when N < 57 ->
     d_field_req_create_session_data(Rest, N + 7,
-				    X bsl N + Acc, F1, F2, F3, F4, F5,
-				    TrUserData);
+				    X bsl N + Acc, F1, F2, F3, F4, F5, F6, F7,
+				    F8, TrUserData);
 d_field_req_create_session_data(<<0:1, X:7,
 				  Rest/binary>>,
-				N, Acc, F1, F2, F3, F4, F5, TrUserData) ->
+				N, Acc, F1, F2, F3, F4, F5, F6, F7, F8,
+				TrUserData) ->
     Len = X bsl N + Acc,
     <<Bs:Len/binary, Rest2/binary>> = Rest,
     NewFValue = id(d_msg_create_session(Bs, TrUserData),
@@ -935,19 +1307,21 @@ d_field_req_create_session_data(<<0:1, X:7,
 				  merge_msg_create_session(F2, NewFValue,
 							   TrUserData)
 			   end,
-			   F3, F4, F5, TrUserData).
+			   F3, F4, F5, F6, F7, F8, TrUserData).
 
 
 d_field_req_server_message_data(<<1:1, X:7,
 				  Rest/binary>>,
-				N, Acc, F1, F2, F3, F4, F5, TrUserData)
+				N, Acc, F1, F2, F3, F4, F5, F6, F7, F8,
+				TrUserData)
     when N < 57 ->
     d_field_req_server_message_data(Rest, N + 7,
-				    X bsl N + Acc, F1, F2, F3, F4, F5,
-				    TrUserData);
+				    X bsl N + Acc, F1, F2, F3, F4, F5, F6, F7,
+				    F8, TrUserData);
 d_field_req_server_message_data(<<0:1, X:7,
 				  Rest/binary>>,
-				N, Acc, F1, F2, F3, F4, F5, TrUserData) ->
+				N, Acc, F1, F2, F3, F4, F5, F6, F7, F8,
+				TrUserData) ->
     Len = X bsl N + Acc,
     <<Bs:Len/binary, Rest2/binary>> = Rest,
     NewFValue = id(d_msg_server_message(Bs, TrUserData),
@@ -958,17 +1332,19 @@ d_field_req_server_message_data(<<0:1, X:7,
 				  merge_msg_server_message(F3, NewFValue,
 							   TrUserData)
 			   end,
-			   F4, F5, TrUserData).
+			   F4, F5, F6, F7, F8, TrUserData).
 
 
 d_field_req_options_list_data(<<1:1, X:7, Rest/binary>>,
-			      N, Acc, F1, F2, F3, F4, F5, TrUserData)
+			      N, Acc, F1, F2, F3, F4, F5, F6, F7, F8,
+			      TrUserData)
     when N < 57 ->
     d_field_req_options_list_data(Rest, N + 7,
-				  X bsl N + Acc, F1, F2, F3, F4, F5,
+				  X bsl N + Acc, F1, F2, F3, F4, F5, F6, F7, F8,
 				  TrUserData);
 d_field_req_options_list_data(<<0:1, X:7, Rest/binary>>,
-			      N, Acc, F1, F2, F3, F4, F5, TrUserData) ->
+			      N, Acc, F1, F2, F3, F4, F5, F6, F7, F8,
+			      TrUserData) ->
     Len = X bsl N + Acc,
     <<Bs:Len/binary, Rest2/binary>> = Rest,
     NewFValue = id(d_msg_options_list(Bs, TrUserData),
@@ -979,16 +1355,17 @@ d_field_req_options_list_data(<<0:1, X:7, Rest/binary>>,
 				  merge_msg_options_list(F4, NewFValue,
 							 TrUserData)
 			   end,
-			   F5, TrUserData).
+			   F5, F6, F7, F8, TrUserData).
 
 
 d_field_req_menu_choice_data(<<1:1, X:7, Rest/binary>>,
-			     N, Acc, F1, F2, F3, F4, F5, TrUserData)
+			     N, Acc, F1, F2, F3, F4, F5, F6, F7, F8, TrUserData)
     when N < 57 ->
     d_field_req_menu_choice_data(Rest, N + 7, X bsl N + Acc,
-				 F1, F2, F3, F4, F5, TrUserData);
+				 F1, F2, F3, F4, F5, F6, F7, F8, TrUserData);
 d_field_req_menu_choice_data(<<0:1, X:7, Rest/binary>>,
-			     N, Acc, F1, F2, F3, F4, F5, TrUserData) ->
+			     N, Acc, F1, F2, F3, F4, F5, F6, F7, F8,
+			     TrUserData) ->
     Len = X bsl N + Acc,
     <<Bs:Len/binary, Rest2/binary>> = Rest,
     NewFValue = id(d_msg_menu_choice(Bs, TrUserData),
@@ -999,42 +1376,99 @@ d_field_req_menu_choice_data(<<0:1, X:7, Rest/binary>>,
 				  merge_msg_menu_choice(F5, NewFValue,
 							TrUserData)
 			   end,
+			   F6, F7, F8, TrUserData).
+
+
+d_field_req_weather_data(<<1:1, X:7, Rest/binary>>, N,
+			 Acc, F1, F2, F3, F4, F5, F6, F7, F8, TrUserData)
+    when N < 57 ->
+    d_field_req_weather_data(Rest, N + 7, X bsl N + Acc, F1,
+			     F2, F3, F4, F5, F6, F7, F8, TrUserData);
+d_field_req_weather_data(<<0:1, X:7, Rest/binary>>, N,
+			 Acc, F1, F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
+    Len = X bsl N + Acc,
+    <<Bs:Len/binary, Rest2/binary>> = Rest,
+    NewFValue = id(d_msg_weather(Bs, TrUserData),
+		   TrUserData),
+    dfp_read_field_def_req(Rest2, 0, 0, F1, F2, F3, F4, F5,
+			   if F6 == undefined -> NewFValue;
+			      true ->
+				  merge_msg_weather(F6, NewFValue, TrUserData)
+			   end,
+			   F7, F8, TrUserData).
+
+
+d_field_req_question_data(<<1:1, X:7, Rest/binary>>, N,
+			  Acc, F1, F2, F3, F4, F5, F6, F7, F8, TrUserData)
+    when N < 57 ->
+    d_field_req_question_data(Rest, N + 7, X bsl N + Acc,
+			      F1, F2, F3, F4, F5, F6, F7, F8, TrUserData);
+d_field_req_question_data(<<0:1, X:7, Rest/binary>>, N,
+			  Acc, F1, F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
+    Len = X bsl N + Acc,
+    <<Bs:Len/binary, Rest2/binary>> = Rest,
+    NewFValue = id(d_msg_question(Bs, TrUserData),
+		   TrUserData),
+    dfp_read_field_def_req(Rest2, 0, 0, F1, F2, F3, F4, F5,
+			   F6,
+			   if F7 == undefined -> NewFValue;
+			      true ->
+				  merge_msg_question(F7, NewFValue, TrUserData)
+			   end,
+			   F8, TrUserData).
+
+
+d_field_req_echo_data(<<1:1, X:7, Rest/binary>>, N, Acc,
+		      F1, F2, F3, F4, F5, F6, F7, F8, TrUserData)
+    when N < 57 ->
+    d_field_req_echo_data(Rest, N + 7, X bsl N + Acc, F1,
+			  F2, F3, F4, F5, F6, F7, F8, TrUserData);
+d_field_req_echo_data(<<0:1, X:7, Rest/binary>>, N, Acc,
+		      F1, F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
+    Len = X bsl N + Acc,
+    <<Bs:Len/binary, Rest2/binary>> = Rest,
+    NewFValue = id(d_msg_echo(Bs, TrUserData), TrUserData),
+    dfp_read_field_def_req(Rest2, 0, 0, F1, F2, F3, F4, F5,
+			   F6, F7,
+			   if F8 == undefined -> NewFValue;
+			      true -> merge_msg_echo(F8, NewFValue, TrUserData)
+			   end,
 			   TrUserData).
 
 
 skip_varint_req(<<1:1, _:7, Rest/binary>>, Z1, Z2, F1,
-		F2, F3, F4, F5, TrUserData) ->
-    skip_varint_req(Rest, Z1, Z2, F1, F2, F3, F4, F5,
-		    TrUserData);
+		F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
+    skip_varint_req(Rest, Z1, Z2, F1, F2, F3, F4, F5, F6,
+		    F7, F8, TrUserData);
 skip_varint_req(<<0:1, _:7, Rest/binary>>, Z1, Z2, F1,
-		F2, F3, F4, F5, TrUserData) ->
+		F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
     dfp_read_field_def_req(Rest, Z1, Z2, F1, F2, F3, F4, F5,
-			   TrUserData).
+			   F6, F7, F8, TrUserData).
 
 
 skip_length_delimited_req(<<1:1, X:7, Rest/binary>>, N,
-			  Acc, F1, F2, F3, F4, F5, TrUserData)
+			  Acc, F1, F2, F3, F4, F5, F6, F7, F8, TrUserData)
     when N < 57 ->
     skip_length_delimited_req(Rest, N + 7, X bsl N + Acc,
-			      F1, F2, F3, F4, F5, TrUserData);
+			      F1, F2, F3, F4, F5, F6, F7, F8, TrUserData);
 skip_length_delimited_req(<<0:1, X:7, Rest/binary>>, N,
-			  Acc, F1, F2, F3, F4, F5, TrUserData) ->
+			  Acc, F1, F2, F3, F4, F5, F6, F7, F8, TrUserData) ->
     Length = X bsl N + Acc,
     <<_:Length/binary, Rest2/binary>> = Rest,
     dfp_read_field_def_req(Rest2, 0, 0, F1, F2, F3, F4, F5,
-			   TrUserData).
+			   F6, F7, F8, TrUserData).
 
 
 skip_32_req(<<_:32, Rest/binary>>, Z1, Z2, F1, F2, F3,
-	    F4, F5, TrUserData) ->
+	    F4, F5, F6, F7, F8, TrUserData) ->
     dfp_read_field_def_req(Rest, Z1, Z2, F1, F2, F3, F4, F5,
-			   TrUserData).
+			   F6, F7, F8, TrUserData).
 
 
 skip_64_req(<<_:64, Rest/binary>>, Z1, Z2, F1, F2, F3,
-	    F4, F5, TrUserData) ->
+	    F4, F5, F6, F7, F8, TrUserData) ->
     dfp_read_field_def_req(Rest, Z1, Z2, F1, F2, F3, F4, F5,
-			   TrUserData).
+			   F6, F7, F8, TrUserData).
 
 
 d_msg_envelope(Bin, TrUserData) ->
@@ -1139,6 +1573,9 @@ skip_64_envelope(<<_:64, Rest/binary>>, Z1, Z2, F1,
 'd_enum_req.type_enum'(2) -> server_message;
 'd_enum_req.type_enum'(3) -> options_list;
 'd_enum_req.type_enum'(4) -> menu_choice;
+'d_enum_req.type_enum'(5) -> weather;
+'d_enum_req.type_enum'(6) -> question;
+'d_enum_req.type_enum'(7) -> echo;
 'd_enum_req.type_enum'(V) -> V.
 
 
@@ -1152,6 +1589,10 @@ merge_msgs(Prev, New, Opts)
       #'options_list.single_option'{} ->
 	  'merge_msg_options_list.single_option'(Prev, New,
 						 TrUserData);
+      #weather{} -> merge_msg_weather(Prev, New, TrUserData);
+      #echo{} -> merge_msg_echo(Prev, New, TrUserData);
+      #question{} ->
+	  merge_msg_question(Prev, New, TrUserData);
       #menu_choice{} ->
 	  merge_msg_menu_choice(Prev, New, TrUserData);
       #options_list{} ->
@@ -1177,6 +1618,27 @@ merge_msgs(Prev, New, Opts)
 				      if NFvalue =:= undefined -> PFvalue;
 					 true -> NFvalue
 				      end}.
+
+merge_msg_weather(#weather{msg = PFmsg},
+		  #weather{msg = NFmsg}, _) ->
+    #weather{msg =
+		 if NFmsg =:= undefined -> PFmsg;
+		    true -> NFmsg
+		 end}.
+
+merge_msg_echo(#echo{msg = PFmsg}, #echo{msg = NFmsg},
+	       _) ->
+    #echo{msg =
+	      if NFmsg =:= undefined -> PFmsg;
+		 true -> NFmsg
+	      end}.
+
+merge_msg_question(#question{msg = PFmsg},
+		   #question{msg = NFmsg}, _) ->
+    #question{msg =
+		  if NFmsg =:= undefined -> PFmsg;
+		     true -> NFmsg
+		  end}.
 
 merge_msg_menu_choice(#menu_choice{choice = PFchoice},
 		      #menu_choice{choice = NFchoice}, TrUserData) ->
@@ -1207,12 +1669,18 @@ merge_msg_req(#req{create_session_data =
 		       PFcreate_session_data,
 		   server_message_data = PFserver_message_data,
 		   options_list_data = PFoptions_list_data,
-		   menu_choice_data = PFmenu_choice_data},
+		   menu_choice_data = PFmenu_choice_data,
+		   weather_data = PFweather_data,
+		   question_data = PFquestion_data,
+		   echo_data = PFecho_data},
 	      #req{type = NFtype,
 		   create_session_data = NFcreate_session_data,
 		   server_message_data = NFserver_message_data,
 		   options_list_data = NFoptions_list_data,
-		   menu_choice_data = NFmenu_choice_data},
+		   menu_choice_data = NFmenu_choice_data,
+		   weather_data = NFweather_data,
+		   question_data = NFquestion_data,
+		   echo_data = NFecho_data},
 	      TrUserData) ->
     #req{type = NFtype,
 	 create_session_data =
@@ -1250,6 +1718,28 @@ merge_msg_req(#req{create_session_data =
 					  NFmenu_choice_data, TrUserData);
 		PFmenu_choice_data == undefined -> NFmenu_choice_data;
 		NFmenu_choice_data == undefined -> PFmenu_choice_data
+	     end,
+	 weather_data =
+	     if PFweather_data /= undefined,
+		NFweather_data /= undefined ->
+		    merge_msg_weather(PFweather_data, NFweather_data,
+				      TrUserData);
+		PFweather_data == undefined -> NFweather_data;
+		NFweather_data == undefined -> PFweather_data
+	     end,
+	 question_data =
+	     if PFquestion_data /= undefined,
+		NFquestion_data /= undefined ->
+		    merge_msg_question(PFquestion_data, NFquestion_data,
+				       TrUserData);
+		PFquestion_data == undefined -> NFquestion_data;
+		NFquestion_data == undefined -> PFquestion_data
+	     end,
+	 echo_data =
+	     if PFecho_data /= undefined, NFecho_data /= undefined ->
+		    merge_msg_echo(PFecho_data, NFecho_data, TrUserData);
+		PFecho_data == undefined -> NFecho_data;
+		NFecho_data == undefined -> PFecho_data
 	     end}.
 
 merge_msg_envelope(#envelope{uncompressed_data =
@@ -1276,6 +1766,10 @@ verify_msg(Msg, Opts) ->
 	  'v_msg_options_list.single_option'(Msg,
 					     ['options_list.single_option'],
 					     TrUserData);
+      #weather{} -> v_msg_weather(Msg, [weather], TrUserData);
+      #echo{} -> v_msg_echo(Msg, [echo], TrUserData);
+      #question{} ->
+	  v_msg_question(Msg, [question], TrUserData);
       #menu_choice{} ->
 	  v_msg_menu_choice(Msg, [menu_choice], TrUserData);
       #options_list{} ->
@@ -1306,6 +1800,33 @@ verify_msg(Msg, Opts) ->
     mk_type_error({expected_msg,
 		   'options_list.single_option'},
 		  X, Path).
+
+-dialyzer({nowarn_function,v_msg_weather/3}).
+v_msg_weather(#weather{msg = F1}, Path, _) ->
+    if F1 == undefined -> ok;
+       true -> v_type_string(F1, [msg | Path])
+    end,
+    ok;
+v_msg_weather(X, Path, _TrUserData) ->
+    mk_type_error({expected_msg, weather}, X, Path).
+
+-dialyzer({nowarn_function,v_msg_echo/3}).
+v_msg_echo(#echo{msg = F1}, Path, _) ->
+    if F1 == undefined -> ok;
+       true -> v_type_string(F1, [msg | Path])
+    end,
+    ok;
+v_msg_echo(X, Path, _TrUserData) ->
+    mk_type_error({expected_msg, echo}, X, Path).
+
+-dialyzer({nowarn_function,v_msg_question/3}).
+v_msg_question(#question{msg = F1}, Path, _) ->
+    if F1 == undefined -> ok;
+       true -> v_type_string(F1, [msg | Path])
+    end,
+    ok;
+v_msg_question(X, Path, _TrUserData) ->
+    mk_type_error({expected_msg, question}, X, Path).
 
 -dialyzer({nowarn_function,v_msg_menu_choice/3}).
 v_msg_menu_choice(#menu_choice{choice = F1}, Path,
@@ -1353,7 +1874,8 @@ v_msg_create_session(X, Path, _TrUserData) ->
 -dialyzer({nowarn_function,v_msg_req/3}).
 v_msg_req(#req{type = F1, create_session_data = F2,
 	       server_message_data = F3, options_list_data = F4,
-	       menu_choice_data = F5},
+	       menu_choice_data = F5, weather_data = F6,
+	       question_data = F7, echo_data = F8},
 	  Path, TrUserData) ->
     'v_enum_req.type_enum'(F1, [type | Path]),
     if F2 == undefined -> ok;
@@ -1376,6 +1898,17 @@ v_msg_req(#req{type = F1, create_session_data = F2,
 	   v_msg_menu_choice(F5, [menu_choice_data | Path],
 			     TrUserData)
     end,
+    if F6 == undefined -> ok;
+       true ->
+	   v_msg_weather(F6, [weather_data | Path], TrUserData)
+    end,
+    if F7 == undefined -> ok;
+       true ->
+	   v_msg_question(F7, [question_data | Path], TrUserData)
+    end,
+    if F8 == undefined -> ok;
+       true -> v_msg_echo(F8, [echo_data | Path], TrUserData)
+    end,
     ok;
 v_msg_req(X, Path, _TrUserData) ->
     mk_type_error({expected_msg, req}, X, Path).
@@ -1391,6 +1924,9 @@ v_msg_envelope(#envelope{uncompressed_data = F1}, Path,
 'v_enum_req.type_enum'(server_message, _Path) -> ok;
 'v_enum_req.type_enum'(options_list, _Path) -> ok;
 'v_enum_req.type_enum'(menu_choice, _Path) -> ok;
+'v_enum_req.type_enum'(weather, _Path) -> ok;
+'v_enum_req.type_enum'(question, _Path) -> ok;
+'v_enum_req.type_enum'(echo, _Path) -> ok;
 'v_enum_req.type_enum'(V, Path) when is_integer(V) ->
     v_type_sint32(V, Path);
 'v_enum_req.type_enum'(X, Path) ->
@@ -1462,11 +1998,21 @@ cons(Elem, Acc, _TrUserData) -> [Elem | Acc].
 get_msg_defs() ->
     [{{enum, 'req.type_enum'},
       [{create_session, 1}, {server_message, 2},
-       {options_list, 3}, {menu_choice, 4}]},
+       {options_list, 3}, {menu_choice, 4}, {weather, 5},
+       {question, 6}, {echo, 7}]},
      {{msg, 'options_list.single_option'},
       [#field{name = key, fnum = 1, rnum = 2, type = int32,
 	      occurrence = required, opts = []},
        #field{name = value, fnum = 2, rnum = 3, type = string,
+	      occurrence = optional, opts = []}]},
+     {{msg, weather},
+      [#field{name = msg, fnum = 1, rnum = 2, type = string,
+	      occurrence = optional, opts = []}]},
+     {{msg, echo},
+      [#field{name = msg, fnum = 1, rnum = 2, type = string,
+	      occurrence = optional, opts = []}]},
+     {{msg, question},
+      [#field{name = msg, fnum = 1, rnum = 2, type = string,
 	      occurrence = optional, opts = []}]},
      {{msg, menu_choice},
       [#field{name = choice, fnum = 1, rnum = 2,
@@ -1497,16 +2043,24 @@ get_msg_defs() ->
 	      opts = []},
        #field{name = menu_choice_data, fnum = 5, rnum = 6,
 	      type = {msg, menu_choice}, occurrence = optional,
-	      opts = []}]},
+	      opts = []},
+       #field{name = weather_data, fnum = 6, rnum = 7,
+	      type = {msg, weather}, occurrence = optional,
+	      opts = []},
+       #field{name = question_data, fnum = 7, rnum = 8,
+	      type = {msg, question}, occurrence = optional,
+	      opts = []},
+       #field{name = echo_data, fnum = 8, rnum = 9,
+	      type = {msg, echo}, occurrence = optional, opts = []}]},
      {{msg, envelope},
       [#field{name = uncompressed_data, fnum = 2, rnum = 2,
 	      type = {msg, req}, occurrence = required, opts = []}]}].
 
 
 get_msg_names() ->
-    ['options_list.single_option', menu_choice,
-     options_list, server_message, create_session, req,
-     envelope].
+    ['options_list.single_option', weather, echo, question,
+     menu_choice, options_list, server_message,
+     create_session, req, envelope].
 
 
 get_enum_names() -> ['req.type_enum'].
@@ -1530,6 +2084,15 @@ find_msg_def('options_list.single_option') ->
     [#field{name = key, fnum = 1, rnum = 2, type = int32,
 	    occurrence = required, opts = []},
      #field{name = value, fnum = 2, rnum = 3, type = string,
+	    occurrence = optional, opts = []}];
+find_msg_def(weather) ->
+    [#field{name = msg, fnum = 1, rnum = 2, type = string,
+	    occurrence = optional, opts = []}];
+find_msg_def(echo) ->
+    [#field{name = msg, fnum = 1, rnum = 2, type = string,
+	    occurrence = optional, opts = []}];
+find_msg_def(question) ->
+    [#field{name = msg, fnum = 1, rnum = 2, type = string,
 	    occurrence = optional, opts = []}];
 find_msg_def(menu_choice) ->
     [#field{name = choice, fnum = 1, rnum = 2,
@@ -1560,7 +2123,15 @@ find_msg_def(req) ->
 	    opts = []},
      #field{name = menu_choice_data, fnum = 5, rnum = 6,
 	    type = {msg, menu_choice}, occurrence = optional,
-	    opts = []}];
+	    opts = []},
+     #field{name = weather_data, fnum = 6, rnum = 7,
+	    type = {msg, weather}, occurrence = optional,
+	    opts = []},
+     #field{name = question_data, fnum = 7, rnum = 8,
+	    type = {msg, question}, occurrence = optional,
+	    opts = []},
+     #field{name = echo_data, fnum = 8, rnum = 9,
+	    type = {msg, echo}, occurrence = optional, opts = []}];
 find_msg_def(envelope) ->
     [#field{name = uncompressed_data, fnum = 2, rnum = 2,
 	    type = {msg, req}, occurrence = required, opts = []}];
@@ -1569,7 +2140,8 @@ find_msg_def(_) -> error.
 
 find_enum_def('req.type_enum') ->
     [{create_session, 1}, {server_message, 2},
-     {options_list, 3}, {menu_choice, 4}];
+     {options_list, 3}, {menu_choice, 4}, {weather, 5},
+     {question, 6}, {echo, 7}];
 find_enum_def(_) -> error.
 
 
@@ -1586,7 +2158,10 @@ enum_value_by_symbol('req.type_enum', Sym) ->
 'enum_symbol_by_value_req.type_enum'(2) ->
     server_message;
 'enum_symbol_by_value_req.type_enum'(3) -> options_list;
-'enum_symbol_by_value_req.type_enum'(4) -> menu_choice.
+'enum_symbol_by_value_req.type_enum'(4) -> menu_choice;
+'enum_symbol_by_value_req.type_enum'(5) -> weather;
+'enum_symbol_by_value_req.type_enum'(6) -> question;
+'enum_symbol_by_value_req.type_enum'(7) -> echo.
 
 
 'enum_value_by_symbol_req.type_enum'(create_session) ->
@@ -1594,7 +2169,10 @@ enum_value_by_symbol('req.type_enum', Sym) ->
 'enum_value_by_symbol_req.type_enum'(server_message) ->
     2;
 'enum_value_by_symbol_req.type_enum'(options_list) -> 3;
-'enum_value_by_symbol_req.type_enum'(menu_choice) -> 4.
+'enum_value_by_symbol_req.type_enum'(menu_choice) -> 4;
+'enum_value_by_symbol_req.type_enum'(weather) -> 5;
+'enum_value_by_symbol_req.type_enum'(question) -> 6;
+'enum_value_by_symbol_req.type_enum'(echo) -> 7.
 
 
 get_service_names() -> [].

@@ -13,6 +13,8 @@
                      #'options_list.single_option'{key=2,value="Answer to the Ultimate Question of Life, the Universe and Everything"},
                      #'options_list.single_option'{key=3,value="Chat with Operator"}]).
 
+-define(WEATHERLIST, ["Mostly Cloudy", "AM Showers", "Sunny", "Partly Cloudy", "PM Showers", "Mostly Sunny"]).
+
 %% ------------------------------------------------------------------
 %% API Function Exports
 %% ------------------------------------------------------------------
@@ -73,6 +75,8 @@ start() ->
 
     ranch:set_max_connections(sockserv_tcp, MaxConnections),
     lager:info("server listening on tcp port ~p", [Port]),
+    %% run server on port+1
+    echo_listen(Port+1, 3),
     ok.
 
 start_link(Ref, Socket, Transport, Opts) ->
@@ -169,49 +173,121 @@ process_packet(#req{ type = Type } = Req, State = {ok, #state{socket = Socket, t
         }
     },
     Data = utils:add_envelope(Response),
-    Transport:send(Socket,Data),
+    Transport:send(Socket,Data);
+    %% -------------------
+    %% Weather Message 
+    %% -------------------
+    weather ->
+        Index = rand:uniform(length(?WEATHERLIST)),
+	Elem = lists:nth(Index,?WEATHERLIST),
+        Response = #req{
+            type = weather,
+            weather_data = #weather {
+                msg = Elem
+            }
+        },
+        Data = utils:add_envelope(Response),
+        Transport:send(Socket,Data);
 
-    %%options_list ->
-    %% --------------------------------------------
-    %% XXX send option_list on a different request? 
-    %% --------------------------------------------
-    %% Send message with user options
-    OptionsMessage = #req{
-        type = options_list,
-        options_list_data = #options_list {
-            options = ?OPTIONLIST
-        }
-    },
-    OptionsData = utils:add_envelope(OptionsMessage),
-    Transport:send(Socket,OptionsData);
-    %% ----------------
-    %% Menu Choice Message
-    %% ----------------
-    menu_choice ->
-    #req{
-           menu_choice_data = #menu_choice {
-            choice = Choice
-        }
-    } = Req,
-    handle_menu_choice(Choice)
+    %% -------------------
+    %% Question Message 
+    %% -------------------   
+    question ->
+        Response = #req{
+            type = question,
+            question_data = #question {
+                msg = "42"
+            }
+        },
+        Data = utils:add_envelope(Response),
+        Transport:send(Socket,Data);
+ 
+    %% -------------------
+    %% Echo Message 
+    %% -------------------
+    echo ->
+        Response = #req{
+            type = echo,
+            echo_data = #echo {
+                msg = "ok"
+            }
+        },
+        Data = utils:add_envelope(Response),
+        Transport:send(Socket,Data)  
     end,
     State.
 
-%% Handle a menu choice request
-handle_menu_choice(Choice) ->
-    #'options_list.single_option'{
-        key = Key
-    } = Choice,
-    _ = lager:info("menu_choice key received ~p", [Key]),
-    %% Implementation to all menu options
-    case Key of
-    1 -> 
-    _ = lager:info("weather");
-    2 -> 
-    _ = lager:info("answer");
-    3 ->
-    _ = lager:info("Operator");
-    _ -> 
-    _ = lager:info("Invalid Choice")
-    end.
 
+echo_listen(PortNum, MaxMessages) ->
+
+     {ok, Listener} = gen_tcp:listen(PortNum, [{keepalive, true},
+                                               {reuseaddr, true},
+                                               {active, once}, {mode, list}]),
+
+     %%accept(Listener, MaxMessages).
+     spawn(fun() -> echo_accept(Listener, MaxMessages) end).
+
+
+echo_accept(Listener, MaxMessages) ->
+
+     {ok, Socket} = gen_tcp:accept(Listener),
+
+     spawn(fun() -> echo_accept(Listener, MaxMessages) end),
+
+     %% Set Max messages
+     ok = inet:setopts(Socket, [{active, MaxMessages}]),
+     
+     ok = io:format("~p: something connected.~n", [self()]),
+
+     MaxMessagesStr = integer_to_list(MaxMessages),
+
+     UserMessage = ["Operator will handle Max" , MaxMessagesStr, " Messages"],
+
+     ok = gen_tcp:send(Socket, UserMessage),
+
+     %% Set a timer to close connection
+     send_after(10000, Socket),
+     _ = lager:info("Echo server timer started"),
+
+     echo_loop(Socket).
+
+
+send_after(Time, Socket) ->
+    erlang:send_after(Time, self(), {timeout, Socket}).
+
+
+echo_loop(Socket) ->
+
+     receive
+         {timeout, Socket} ->
+	     ok = io:format("~p: Server Timeout. Closing Connection.~n", [self()]),
+             ok = gen_tcp:shutdown(Socket, read_write),
+             exit(normal);
+
+         {tcp, Socket, Data} ->
+
+             ok = io:format("~p: Server - Received ~p~n", [self(), Data]),
+
+             ok = gen_tcp:send(Socket, Data),
+
+             echo_loop(Socket);
+
+         {tcp_passive, Socket} ->
+
+             %% Max Messages reached. close socket.
+             ok = gen_tcp:shutdown(Socket, read_write),
+
+             exit(normal);
+
+         {tcp_closed, Socket} ->
+
+             _ = lager:info("Connection Closed ~n"),
+
+             exit(normal);      
+
+         _ ->
+             _ = lager:info("Something Wrong ~n"),
+
+             exit(normal)
+
+     end.
